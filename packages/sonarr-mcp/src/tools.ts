@@ -12,7 +12,7 @@ import {
   Tag,
 } from "@trugamr/sonarr/effect"
 import { Tool, Toolkit } from "@effect/ai"
-import { Effect, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 
 /** Tool-call failure shape returned to the model when a Sonarr call fails. */
 const ToolError = Schema.Struct({
@@ -26,133 +26,110 @@ const ToolError = Schema.Struct({
  */
 const toToolError = (error: SonarrError) => ({ _tag: error._tag, message: error.message })
 
-// Tool declarations. Each carries the MCP safety hints: `Readonly` (no state
-// change), `Destructive` (removes/overwrites data), and `OpenWorld` (reaches
-// beyond the instance — always false here, every call hits one Sonarr).
+// MCP safety hints, applied per tool via `annotateContext`. `OpenWorld` is always
+// false — every call reaches one configured Sonarr instance, nothing beyond it.
+// The three contexts cover the combinations this surface uses: read-only,
+// state-changing-but-non-destructive, and destructive (removes data).
+const readonlyHints = Context.empty().pipe(
+  Context.add(Tool.Readonly, true),
+  Context.add(Tool.Destructive, false),
+  Context.add(Tool.OpenWorld, false),
+)
+const writeHints = Context.empty().pipe(
+  Context.add(Tool.Readonly, false),
+  Context.add(Tool.Destructive, false),
+  Context.add(Tool.OpenWorld, false),
+)
+const destructiveHints = Context.empty().pipe(
+  Context.add(Tool.Readonly, false),
+  Context.add(Tool.Destructive, true),
+  Context.add(Tool.OpenWorld, false),
+)
 
 const GetSystemStatus = Tool.make("get_system_status", {
   description:
     "Get the Sonarr instance status — version, runtime, OS, database, and authentication info.",
   success: SystemStatus,
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(readonlyHints)
 
 const ListSeries = Tool.make("list_series", {
   description: "List all series in the Sonarr library.",
   success: Schema.Array(Series),
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(readonlyHints)
 
 const GetSeries = Tool.make("get_series", {
   description: "Get a single series by its Sonarr id.",
   parameters: { seriesId: Schema.Number },
   success: Series,
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(readonlyHints)
 
 const ListEpisodes = Tool.make("list_episodes", {
   description: "List episodes for a series, optionally filtered to a single season.",
   parameters: { seriesId: Schema.Number, seasonNumber: Schema.optional(Schema.Number) },
   success: Schema.Array(Episode),
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(readonlyHints)
 
 const ListQualityProfiles = Tool.make("list_quality_profiles", {
   description: "List Sonarr quality profiles.",
   success: Schema.Array(QualityProfile),
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(readonlyHints)
 
 const ListRootFolders = Tool.make("list_root_folders", {
   description: "List configured root folders and their free space.",
   success: Schema.Array(RootFolder),
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(readonlyHints)
 
 const AddRootFolder = Tool.make("add_root_folder", {
   description: "Register a new root folder by absolute path.",
   parameters: { path: Schema.String },
   success: RootFolder,
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, false)
-  .annotate(Tool.Destructive, false)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(writeHints)
 
 const DeleteRootFolder = Tool.make("delete_root_folder", {
   description: "Delete a root folder by its id.",
   parameters: { rootFolderId: Schema.Number },
   success: Schema.Void,
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, false)
-  .annotate(Tool.Destructive, true)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(destructiveHints)
 
 const ListTags = Tool.make("list_tags", {
   description: "List Sonarr tags.",
   success: Schema.Array(Tag),
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(readonlyHints)
 
 const CreateTag = Tool.make("create_tag", {
   description: "Create a tag with the given label.",
   parameters: { label: Schema.String },
   success: Tag,
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, false)
-  .annotate(Tool.Destructive, false)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(writeHints)
 
 const DeleteTag = Tool.make("delete_tag", {
   description: "Delete a tag by its id.",
   parameters: { tagId: Schema.Number },
   success: Schema.Void,
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, false)
-  .annotate(Tool.Destructive, true)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(destructiveHints)
 
 const ListHealth = Tool.make("list_health", {
   description: "List active Sonarr health-check messages.",
   success: Schema.Array(Health),
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(readonlyHints)
 
 const ListDiskSpace = Tool.make("list_disk_space", {
   description: "List free and total disk space for Sonarr-visible mounts.",
   success: Schema.Array(DiskSpace),
   failure: ToolError,
-})
-  .annotate(Tool.Readonly, true)
-  .annotate(Tool.Destructive, false)
-  .annotate(Tool.OpenWorld, false)
+}).annotateContext(readonlyHints)
 
 export const SonarrToolkit = Toolkit.make(
   GetSystemStatus,

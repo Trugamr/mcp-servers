@@ -1,4 +1,4 @@
-import { Sonarr } from "@trugamr/sonarr/effect"
+import { Sonarr, type SonarrService } from "@trugamr/sonarr/effect"
 import { Cause, Effect, Exit, Option } from "effect"
 import { http, HttpResponse } from "msw"
 import { setupServer } from "msw/node"
@@ -20,14 +20,15 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }))
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 
-/** Drive the handler with a Sonarr client pointed at the mocked instance. */
-const runStatus = () => Effect.flatMap(Sonarr, getSystemStatus).pipe(Effect.provide(TestSonarr))
+/** Drive a handler with a Sonarr client pointed at the mocked instance. */
+const run = <A, E>(build: (sonarr: SonarrService) => Effect.Effect<A, E>) =>
+  Effect.flatMap(Sonarr, build).pipe(Effect.provide(TestSonarr))
 
 describe("get_system_status tool handler", () => {
   it("returns the decoded status on success", async () => {
     server.use(http.get(statusUrl, () => HttpResponse.json(systemStatusFixture)))
 
-    const status = await Effect.runPromise(runStatus())
+    const status = await Effect.runPromise(run(getSystemStatus))
 
     expect(status.appName).toBe("Sonarr")
     expect(status.version).toBe(systemStatusFixture.version)
@@ -36,7 +37,7 @@ describe("get_system_status tool handler", () => {
   it("maps a SonarrError into the tool-error shape (401 → SonarrResponseError)", async () => {
     server.use(http.get(statusUrl, () => new HttpResponse(null, { status: 401 })))
 
-    const exit = await Effect.runPromiseExit(runStatus())
+    const exit = await Effect.runPromiseExit(run(getSystemStatus))
 
     expect(Exit.isFailure(exit)).toBe(true)
     const failure = Exit.isFailure(exit) ? Cause.failureOption(exit.cause) : Option.none()
@@ -52,9 +53,7 @@ describe("library tool handlers", () => {
   it("list_series returns the decoded series", async () => {
     server.use(http.get(`${baseUrl}/api/v3/series`, () => HttpResponse.json([seriesFixture])))
 
-    const series = await Effect.runPromise(
-      Effect.flatMap(Sonarr, listSeries).pipe(Effect.provide(TestSonarr)),
-    )
+    const series = await Effect.runPromise(run(listSeries))
 
     expect(series[0]?.title).toBe(seriesFixture.title)
   })
@@ -62,9 +61,7 @@ describe("library tool handlers", () => {
   it("get_series interpolates the id into the request path", async () => {
     server.use(http.get(`${baseUrl}/api/v3/series/5`, () => HttpResponse.json(seriesFixture)))
 
-    const series = await Effect.runPromise(
-      Effect.flatMap(Sonarr, (sonarr) => getSeries(sonarr, 5)).pipe(Effect.provide(TestSonarr)),
-    )
+    const series = await Effect.runPromise(run((sonarr) => getSeries(sonarr, 5)))
 
     expect(series.id).toBe(5)
   })
@@ -78,11 +75,7 @@ describe("library tool handlers", () => {
       }),
     )
 
-    await Effect.runPromise(
-      Effect.flatMap(Sonarr, (sonarr) =>
-        listEpisodes(sonarr, { seriesId: 5, seasonNumber: 2 }),
-      ).pipe(Effect.provide(TestSonarr)),
-    )
+    await Effect.runPromise(run((sonarr) => listEpisodes(sonarr, { seriesId: 5, seasonNumber: 2 })))
 
     expect(url?.searchParams.get("seriesId")).toBe("5")
     expect(url?.searchParams.get("seasonNumber")).toBe("2")
@@ -91,11 +84,7 @@ describe("library tool handlers", () => {
   it("create_tag posts the label and returns the created tag", async () => {
     server.use(http.post(`${baseUrl}/api/v3/tag`, () => HttpResponse.json(tagFixture)))
 
-    const tag = await Effect.runPromise(
-      Effect.flatMap(Sonarr, (sonarr) => createTag(sonarr, "anime")).pipe(
-        Effect.provide(TestSonarr),
-      ),
-    )
+    const tag = await Effect.runPromise(run((sonarr) => createTag(sonarr, "anime")))
 
     expect(tag.label).toBe(tagFixture.label)
   })
@@ -103,9 +92,7 @@ describe("library tool handlers", () => {
   it("maps a SonarrError into the tool-error shape (401 on list_series)", async () => {
     server.use(http.get(`${baseUrl}/api/v3/series`, () => new HttpResponse(null, { status: 401 })))
 
-    const exit = await Effect.runPromiseExit(
-      Effect.flatMap(Sonarr, listSeries).pipe(Effect.provide(TestSonarr)),
-    )
+    const exit = await Effect.runPromiseExit(run(listSeries))
 
     expect(Exit.isFailure(exit)).toBe(true)
     const failure = Exit.isFailure(exit) ? Cause.failureOption(exit.cause) : Option.none()

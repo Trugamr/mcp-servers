@@ -1,25 +1,11 @@
-import { Effect } from "effect"
 import { http, HttpResponse } from "msw"
 import { describe, expect, it } from "vitest"
-import { Sonarr, SonarrResponseError } from "../effect.js"
+import { SonarrResponseError } from "../effect.js"
 import { tagFixture } from "./fixtures/tag.js"
-import { apiKey, baseUrl, failureOf, setupMockServer, successOf } from "./helpers.js"
+import { baseUrl, failureOf, runExit, setupMockServer, successOf } from "./helpers.js"
 
 const tagUrl = `${baseUrl}/api/v3/tag`
 const server = setupMockServer()
-const TestSonarr = Sonarr.layer({ baseUrl, apiKey })
-
-const runCreate = (label: string) =>
-  Effect.flatMap(Sonarr, (sonarr) => sonarr.tag.create(label)).pipe(
-    Effect.provide(TestSonarr),
-    Effect.runPromiseExit,
-  )
-
-const runDelete = (id: number) =>
-  Effect.flatMap(Sonarr, (sonarr) => sonarr.tag.delete(id)).pipe(
-    Effect.provide(TestSonarr),
-    Effect.runPromiseExit,
-  )
 
 describe("Sonarr service — tag writes", () => {
   it("creates a tag, sending the label in the JSON body", async () => {
@@ -31,7 +17,7 @@ describe("Sonarr service — tag writes", () => {
       }),
     )
 
-    const tag = successOf(await runCreate("anime"))
+    const tag = successOf(await runExit((sonarr) => sonarr.tag.create("anime")))
 
     expect(tag.label).toBe(tagFixture.label)
     expect(body).toEqual({ label: "anime" })
@@ -42,7 +28,7 @@ describe("Sonarr service — tag writes", () => {
     // that an empty body is accepted (nothing is decoded on delete).
     server.use(http.delete(`${tagUrl}/7`, () => new HttpResponse(null, { status: 200 })))
 
-    const result = successOf(await runDelete(7))
+    const result = successOf(await runExit((sonarr) => sonarr.tag.delete(7)))
 
     expect(result).toBeUndefined()
   })
@@ -50,7 +36,7 @@ describe("Sonarr service — tag writes", () => {
   it("maps a failed delete to a typed SonarrResponseError", async () => {
     server.use(http.delete(`${tagUrl}/999`, () => new HttpResponse(null, { status: 404 })))
 
-    const error = failureOf(await runDelete(999))
+    const error = failureOf(await runExit((sonarr) => sonarr.tag.delete(999)))
 
     expect(error).toBeInstanceOf(SonarrResponseError)
   })

@@ -1,9 +1,20 @@
-import { Cause, Exit, Option } from "effect"
+import { Cause, Effect, Exit, Option } from "effect"
 import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll } from "vitest"
+import { Sonarr, type SonarrService } from "../effect.js"
 
 export const baseUrl = "http://sonarr.test"
 export const apiKey = "test-api-key"
+
+/** A Sonarr client pointed at the mocked instance, shared across the SDK tests. */
+export const TestSonarr = Sonarr.layer({ baseUrl, apiKey })
+
+/**
+ * Resolve a client operation against `TestSonarr` to an Exit, so each test can
+ * assert on the success value or read the typed error from the failure channel.
+ */
+export const runExit = <A, E>(build: (sonarr: SonarrService) => Effect.Effect<A, E>) =>
+  Effect.flatMap(Sonarr, build).pipe(Effect.provide(TestSonarr), Effect.runPromiseExit)
 
 /** Pull the success value out of an Exit, failing loudly with the cause otherwise. */
 export const successOf = <A, E>(exit: Exit.Exit<A, E>): A => {

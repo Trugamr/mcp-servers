@@ -3,6 +3,10 @@ import type { SonarrConfig } from "./config.js"
 import { getJson, provideTransport } from "./http.js"
 import { Episode } from "./schemas/episode.js"
 
+// `episode.list` takes params, so it's wired as a function and called per request;
+// build the array schema once here rather than on every call.
+const EpisodeArray = Schema.Array(Episode)
+
 export interface EpisodeListParams {
   readonly seriesId: number
   readonly seasonNumber?: number | undefined
@@ -15,7 +19,7 @@ export interface EpisodeListParams {
  */
 export const list = (config: SonarrConfig, params: EpisodeListParams) =>
   provideTransport(
-    getJson(config, Schema.Array(Episode), "/api/v3/episode", {
+    getJson(config, EpisodeArray, "/api/v3/episode", {
       urlParams: { seriesId: params.seriesId, seasonNumber: params.seasonNumber },
     }),
   )

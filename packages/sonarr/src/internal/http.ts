@@ -16,6 +16,12 @@ const toDecodeError = (error: unknown) => new SonarrDecodeError({ cause: error }
 /** The `X-Api-Key` header. Unwraps the `Redacted` key only here, at the request boundary. */
 const apiKeyHeader = (config: SonarrConfig) => ({ "X-Api-Key": Redacted.value(config.apiKey) })
 
+/** Fail with a typed `SonarrResponseError` when Sonarr responds with a non-2xx status. */
+const ensureSuccess = (response: HttpClientResponse.HttpClientResponse) =>
+  response.status >= 400
+    ? Effect.fail(new SonarrResponseError({ status: response.status, cause: response }))
+    : Effect.void
+
 /**
  * Funnel a request's transport, non-2xx, and decoding outcomes into the typed
  * `SonarrError` channel and close the response scope. Every verb pipes through
@@ -67,9 +73,7 @@ export const getJson = <A, I>(
         urlParams: options?.urlParams,
       })
 
-      if (response.status >= 400) {
-        return yield* new SonarrResponseError({ status: response.status, cause: response })
-      }
+      yield* ensureSuccess(response)
 
       return yield* HttpClientResponse.schemaBodyJson(schema)(response)
     }),
@@ -96,9 +100,7 @@ export const sendJson = <A, I>(
         body: HttpBody.unsafeJson(body),
       })
 
-      if (response.status >= 400) {
-        return yield* new SonarrResponseError({ status: response.status, cause: response })
-      }
+      yield* ensureSuccess(response)
 
       return yield* HttpClientResponse.schemaBodyJson(schema)(response)
     }),
@@ -121,9 +123,7 @@ export const del = (
         urlParams: options?.urlParams,
       })
 
-      if (response.status >= 400) {
-        return yield* new SonarrResponseError({ status: response.status, cause: response })
-      }
+      yield* ensureSuccess(response)
     }),
   )
 
