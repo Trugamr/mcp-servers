@@ -1,7 +1,7 @@
 /**
- * Realistic `GET /api/v3/system/status` payload, including the many fields the
- * schema does not model (`isDebug`, `sqliteVersion`, `migrationVersion`, …) so
- * decoding it exercises forward-compatibility with a real-world response.
+ * Realistic `GET /api/v3/system/status` payload. `sqliteVersion` is not modeled
+ * by the schema; including it here verifies that `Schema.Struct` drops unmodeled
+ * keys instead of failing.
  */
 export const systemStatusFixture = {
   appName: "Sonarr",

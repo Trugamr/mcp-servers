@@ -16,7 +16,10 @@ const BaseUrl = Schema.transform(
 
 export const SonarrConfig = Schema.Struct({
   baseUrl: BaseUrl,
-  apiKey: Schema.String.pipe(Schema.minLength(1)),
+  // Stored as `Redacted` so the key prints as `<redacted>` in logs, errors, and
+  // `JSON.stringify`. Input stays a plain string; unwrap with `Redacted.value`
+  // only at the request boundary.
+  apiKey: Schema.Redacted(Schema.String.pipe(Schema.minLength(1))),
 })
 
 export type SonarrConfig = Schema.Schema.Type<typeof SonarrConfig>
