@@ -1,6 +1,7 @@
 # pre-commit: lint + format staged files (auto-fix, re-stage), then typecheck.
-# lint/format act on staged files; typecheck builds the workspace first (so
-# cross-package imports resolve to built dist) and checks the whole project.
+# lint/format act on staged files; typecheck runs via Turbo, which builds
+# dependencies first (so cross-package imports resolve to built dist) and
+# caches results, then checks the whole project.
 pre-commit:
   parallel: false
   commands:
@@ -17,4 +18,4 @@ pre-commit:
     typecheck:
       priority: 3
       glob: "*.{ts,tsx,mts,cts}"
-      run: pnpm build && pnpm typecheck
+      run: pnpm typecheck
