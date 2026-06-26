@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import type { SonarrConfig } from "./config.js"
 import { getJson, provideTransport } from "./http.js"
 import { Episode } from "./schemas/episode.js"
+import { v3Path } from "./version.js"
 
 // `episode.list` takes params, so it's wired as a function and called per request;
 // build the array schema once here rather than on every call.
@@ -19,7 +20,7 @@ export interface EpisodeListParams {
  */
 export const list = (config: SonarrConfig, params: EpisodeListParams) =>
   provideTransport(
-    getJson(config, EpisodeArray, "/api/v3/episode", {
+    getJson(config, EpisodeArray, v3Path("/episode"), {
       urlParams: { seriesId: params.seriesId, seasonNumber: params.seasonNumber },
     }),
   )

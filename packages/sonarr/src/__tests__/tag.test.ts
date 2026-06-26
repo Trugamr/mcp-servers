@@ -2,9 +2,9 @@ import { http, HttpResponse } from "msw"
 import { describe, expect, it } from "vitest"
 import { SonarrResponseError } from "../effect.js"
 import { tagFixture } from "./fixtures/tag.js"
-import { baseUrl, failureOf, runExit, setupMockServer, successOf } from "./helpers.js"
+import { apiUrl, failureOf, runExit, setupMockServer, successOf } from "./helpers.js"
 
-const tagUrl = `${baseUrl}/api/v3/tag`
+const tagUrl = apiUrl("/tag")
 const server = setupMockServer()
 
 describe("Sonarr service — tag writes", () => {
