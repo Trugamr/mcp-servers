@@ -1,6 +1,36 @@
 #!/usr/bin/env node
-import { NodeRuntime } from "@effect/platform-node"
-import { Layer } from "effect"
-import { ServerLive } from "./server.js"
+import { Command, Options } from "@effect/cli"
+import { NodeContext, NodeRuntime } from "@effect/platform-node"
+import { Config, Effect, Layer } from "effect"
+import pkg from "../package.json" with { type: "json" }
+import { httpServerLive, StdioServerLive } from "./server.js"
 
-Layer.launch(ServerLive).pipe(NodeRuntime.runMain)
+// HTTP network settings: flag → env → default. host defaults to loopback, so
+// self-hosting opts into a wider bind (`--host 0.0.0.0`) behind its own
+// VPN/firewall. Secrets stay in env (SONARR_BASE_URL / SONARR_API_KEY), read by
+// the Sonarr config layer.
+const hostOption = Options.text("host").pipe(
+  Options.withFallbackConfig(Config.string("HOST")),
+  Options.withDefault("127.0.0.1"),
+)
+const portOption = Options.integer("port").pipe(
+  Options.withFallbackConfig(Config.integer("PORT")),
+  Options.withDefault(3000),
+)
+
+// Shared by the explicit `stdio` subcommand and the bare `sonarr-mcp` default.
+const runStdio = () => Layer.launch(StdioServerLive)
+
+const stdio = Command.make("stdio", {}, runStdio)
+const http = Command.make("http", { host: hostOption, port: portOption }, ({ host, port }) =>
+  Layer.launch(httpServerLive({ host, port })),
+)
+
+// A bare invocation runs stdio — the shape local MCP hosts spawn.
+const sonarrMcp = Command.make("sonarr-mcp", {}, runStdio).pipe(
+  Command.withSubcommands([stdio, http]),
+)
+
+const cli = Command.run(sonarrMcp, { name: "sonarr-mcp", version: pkg.version })
+
+cli(process.argv).pipe(Effect.provide(NodeContext.layer), NodeRuntime.runMain)
