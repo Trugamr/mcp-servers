@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15 # bound runaway/abusive jobs
     env:
-      TURBO_TELEMETRY_DISABLED: "1" # no anonymous telemetry in CI
+      TURBO_TELEMETRY_DISABLED: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
