@@ -11,7 +11,9 @@ import { tagFixture } from "./fixtures/tag.js"
 
 const baseUrl = "http://sonarr.test"
 const apiKey = "test-api-key"
-const statusUrl = `${baseUrl}/api/v3/system/status`
+/** Absolute URL for a v3 API path on the mocked instance, e.g. `apiUrl("/series")`. */
+const apiUrl = (path: string) => `${baseUrl}/api/v3${path}`
+const statusUrl = apiUrl("/system/status")
 const TestSonarr = Sonarr.layer({ baseUrl, apiKey })
 
 const server = setupServer()
@@ -51,15 +53,15 @@ describe("get_system_status tool handler", () => {
 
 describe("library tool handlers", () => {
   it("list_series returns the decoded series", async () => {
-    server.use(http.get(`${baseUrl}/api/v3/series`, () => HttpResponse.json([seriesFixture])))
+    server.use(http.get(apiUrl("/series"), () => HttpResponse.json([seriesFixture])))
 
-    const series = await Effect.runPromise(run(listSeries))
+    const { items } = await Effect.runPromise(run(listSeries))
 
-    expect(series[0]?.title).toBe(seriesFixture.title)
+    expect(items[0]?.title).toBe(seriesFixture.title)
   })
 
   it("get_series interpolates the id into the request path", async () => {
-    server.use(http.get(`${baseUrl}/api/v3/series/5`, () => HttpResponse.json(seriesFixture)))
+    server.use(http.get(apiUrl("/series/5"), () => HttpResponse.json(seriesFixture)))
 
     const series = await Effect.runPromise(run((sonarr) => getSeries(sonarr, 5)))
 
@@ -69,7 +71,7 @@ describe("library tool handlers", () => {
   it("list_episodes forwards seriesId and seasonNumber as query params", async () => {
     let url: URL | undefined
     server.use(
-      http.get(`${baseUrl}/api/v3/episode`, ({ request }) => {
+      http.get(apiUrl("/episode"), ({ request }) => {
         url = new URL(request.url)
         return HttpResponse.json([episodeFixture])
       }),
@@ -82,7 +84,7 @@ describe("library tool handlers", () => {
   })
 
   it("create_tag posts the label and returns the created tag", async () => {
-    server.use(http.post(`${baseUrl}/api/v3/tag`, () => HttpResponse.json(tagFixture)))
+    server.use(http.post(apiUrl("/tag"), () => HttpResponse.json(tagFixture)))
 
     const tag = await Effect.runPromise(run((sonarr) => createTag(sonarr, "anime")))
 
@@ -90,7 +92,7 @@ describe("library tool handlers", () => {
   })
 
   it("maps a SonarrError into the tool-error shape (401 on list_series)", async () => {
-    server.use(http.get(`${baseUrl}/api/v3/series`, () => new HttpResponse(null, { status: 401 })))
+    server.use(http.get(apiUrl("/series"), () => new HttpResponse(null, { status: 401 })))
 
     const exit = await Effect.runPromiseExit(run(listSeries))
 
