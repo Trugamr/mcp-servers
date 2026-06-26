@@ -1,5 +1,5 @@
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "@effect/platform"
-import { Effect, Schema } from "effect"
+import { Effect, Redacted, Schema } from "effect"
 import type { SonarrConfig } from "./config.js"
 import type { SonarrError } from "./errors.js"
 import { SonarrDecodeError, SonarrRequestError, SonarrResponseError } from "./errors.js"
@@ -20,7 +20,7 @@ export const getJson = <A, I>(
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient
     const response = yield* client.get(`${config.baseUrl}${path}`, {
-      headers: { "X-Api-Key": config.apiKey },
+      headers: { "X-Api-Key": Redacted.value(config.apiKey) },
     })
 
     if (response.status >= 400) {

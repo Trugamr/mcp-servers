@@ -2,9 +2,8 @@ import { Cause, Effect, Exit, Option } from "effect"
 import { http, HttpResponse } from "msw"
 import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
-import { getStatus } from "../effect.js"
+import { Sonarr as SonarrEffect } from "../effect.js"
 import { Sonarr, SonarrDecodeError, SonarrRequestError, SonarrResponseError } from "../index.js"
-import { decodeConfig } from "../internal/config.js"
 import { systemStatusFixture } from "./fixtures/system-status.js"
 
 const baseUrl = "http://sonarr.test"
@@ -79,19 +78,22 @@ describe("Promise surface — system.getStatus", () => {
   })
 })
 
-describe("Effect surface — getStatus", () => {
+describe("Effect surface — Sonarr service", () => {
+  const layer = SonarrEffect.layer({ baseUrl, apiKey })
+  const status = Effect.flatMap(SonarrEffect, (s) => s.system.getStatus).pipe(Effect.provide(layer))
+
   it("decodes a valid status response", async () => {
     server.use(http.get(statusUrl, () => HttpResponse.json(systemStatusFixture)))
 
-    const status = await Effect.runPromise(getStatus(decodeConfig({ baseUrl, apiKey })))
+    const result = await Effect.runPromise(status)
 
-    expect(status.version).toBe(systemStatusFixture.version)
+    expect(result.version).toBe(systemStatusFixture.version)
   })
 
   it("puts a typed SonarrResponseError in the failure channel — no throw, no defect", async () => {
     server.use(http.get(statusUrl, () => new HttpResponse(null, { status: 500 })))
 
-    const exit = await Effect.runPromiseExit(getStatus(decodeConfig({ baseUrl, apiKey })))
+    const exit = await Effect.runPromiseExit(status)
 
     expect(Exit.isFailure(exit)).toBe(true)
     const failure = Exit.isFailure(exit) ? Cause.failureOption(exit.cause) : Option.none()
