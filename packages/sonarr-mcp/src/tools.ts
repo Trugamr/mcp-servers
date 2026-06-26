@@ -1,6 +1,7 @@
 import {
   DiskSpace,
   Episode,
+  type EpisodeListParams,
   Health,
   QualityProfile,
   RootFolder,
@@ -28,23 +29,15 @@ const toToolError = (error: SonarrError) => ({ _tag: error._tag, message: error.
 
 // MCP safety hints, applied per tool via `annotateContext`. `OpenWorld` is always
 // false — every call reaches one configured Sonarr instance, nothing beyond it.
-// The three contexts cover the combinations this surface uses: read-only,
-// state-changing-but-non-destructive, and destructive (removes data).
-const readonlyHints = Context.empty().pipe(
-  Context.add(Tool.Readonly, true),
-  Context.add(Tool.Destructive, false),
-  Context.add(Tool.OpenWorld, false),
-)
-const writeHints = Context.empty().pipe(
-  Context.add(Tool.Readonly, false),
-  Context.add(Tool.Destructive, false),
-  Context.add(Tool.OpenWorld, false),
-)
-const destructiveHints = Context.empty().pipe(
-  Context.add(Tool.Readonly, false),
-  Context.add(Tool.Destructive, true),
-  Context.add(Tool.OpenWorld, false),
-)
+const hints = (annotations: { readonly readonly: boolean; readonly destructive: boolean }) =>
+  Context.empty().pipe(
+    Context.add(Tool.Readonly, annotations.readonly),
+    Context.add(Tool.Destructive, annotations.destructive),
+    Context.add(Tool.OpenWorld, false),
+  )
+const readonlyHints = hints({ readonly: true, destructive: false })
+const writeHints = hints({ readonly: false, destructive: false })
+const destructiveHints = hints({ readonly: false, destructive: true })
 
 const GetSystemStatus = Tool.make("get_system_status", {
   description:
@@ -150,46 +143,39 @@ export const SonarrToolkit = Toolkit.make(
 // Handlers in isolation: call the Sonarr client and map `SonarrError` to the
 // tool-error shape. Exported so unit tests can drive them directly.
 
-export const getSystemStatus = (sonarr: SonarrService) =>
-  sonarr.system.getStatus.pipe(Effect.mapError(toToolError))
+/** Run a Sonarr operation, surfacing its `SonarrError` as the tool-error shape. */
+const handle = <A>(effect: Effect.Effect<A, SonarrError>) =>
+  effect.pipe(Effect.mapError(toToolError))
 
-export const listSeries = (sonarr: SonarrService) =>
-  sonarr.series.list.pipe(Effect.mapError(toToolError))
+export const getSystemStatus = (sonarr: SonarrService) => handle(sonarr.system.getStatus)
+
+export const listSeries = (sonarr: SonarrService) => handle(sonarr.series.list)
 
 export const getSeries = (sonarr: SonarrService, seriesId: number) =>
-  sonarr.series.get(seriesId).pipe(Effect.mapError(toToolError))
+  handle(sonarr.series.get(seriesId))
 
-export const listEpisodes = (
-  sonarr: SonarrService,
-  params: { readonly seriesId: number; readonly seasonNumber?: number | undefined },
-) => sonarr.episode.list(params).pipe(Effect.mapError(toToolError))
+export const listEpisodes = (sonarr: SonarrService, params: EpisodeListParams) =>
+  handle(sonarr.episode.list(params))
 
-export const listQualityProfiles = (sonarr: SonarrService) =>
-  sonarr.qualityProfile.list.pipe(Effect.mapError(toToolError))
+export const listQualityProfiles = (sonarr: SonarrService) => handle(sonarr.qualityProfile.list)
 
-export const listRootFolders = (sonarr: SonarrService) =>
-  sonarr.rootFolder.list.pipe(Effect.mapError(toToolError))
+export const listRootFolders = (sonarr: SonarrService) => handle(sonarr.rootFolder.list)
 
 export const addRootFolder = (sonarr: SonarrService, path: string) =>
-  sonarr.rootFolder.add(path).pipe(Effect.mapError(toToolError))
+  handle(sonarr.rootFolder.add(path))
 
 export const deleteRootFolder = (sonarr: SonarrService, id: number) =>
-  sonarr.rootFolder.delete(id).pipe(Effect.mapError(toToolError))
+  handle(sonarr.rootFolder.delete(id))
 
-export const listTags = (sonarr: SonarrService) =>
-  sonarr.tag.list.pipe(Effect.mapError(toToolError))
+export const listTags = (sonarr: SonarrService) => handle(sonarr.tag.list)
 
-export const createTag = (sonarr: SonarrService, label: string) =>
-  sonarr.tag.create(label).pipe(Effect.mapError(toToolError))
+export const createTag = (sonarr: SonarrService, label: string) => handle(sonarr.tag.create(label))
 
-export const deleteTag = (sonarr: SonarrService, id: number) =>
-  sonarr.tag.delete(id).pipe(Effect.mapError(toToolError))
+export const deleteTag = (sonarr: SonarrService, id: number) => handle(sonarr.tag.delete(id))
 
-export const listHealth = (sonarr: SonarrService) =>
-  sonarr.health.list.pipe(Effect.mapError(toToolError))
+export const listHealth = (sonarr: SonarrService) => handle(sonarr.health.list)
 
-export const listDiskSpace = (sonarr: SonarrService) =>
-  sonarr.diskSpace.list.pipe(Effect.mapError(toToolError))
+export const listDiskSpace = (sonarr: SonarrService) => handle(sonarr.diskSpace.list)
 
 /** Toolkit handlers, reading the Sonarr client from context. */
 export const SonarrToolkitLive = SonarrToolkit.toLayer(

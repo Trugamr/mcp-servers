@@ -6,7 +6,7 @@ import {
   HttpClientResponse,
   type UrlParams,
 } from "@effect/platform"
-import { Effect, type ParseResult, Redacted, Schema } from "effect"
+import { Effect, type ParseResult, Redacted, Schema, type Scope } from "effect"
 import type { SonarrConfig } from "./config.js"
 import type { SonarrError } from "./errors.js"
 import { SonarrDecodeError, SonarrRequestError, SonarrResponseError } from "./errors.js"
@@ -24,7 +24,7 @@ const ensureSuccess = (response: HttpClientResponse.HttpClientResponse) =>
 
 /**
  * Funnel a request's transport, non-2xx, and decoding outcomes into the typed
- * `SonarrError` channel and close the response scope. Every verb pipes through
+ * `SonarrError` channel and close the response scope. Every request pipes through
  * this, so the failure contract is identical regardless of method.
  */
 const finalize = <A, R>(
@@ -47,6 +47,33 @@ const finalize = <A, R>(
   )
 
 /**
+ * The shared request core: `send` the request, fail on a non-2xx status, then
+ * `decode` the response — all funneled through `finalize`. Centralizing the status
+ * check here means no verb can forget it. Declares its `HttpClient` requirement
+ * rather than baking in a transport; discharge it at the edge with `provideTransport`.
+ */
+const request = <A>(
+  send: (
+    client: HttpClient.HttpClient,
+  ) => Effect.Effect<
+    HttpClientResponse.HttpClientResponse,
+    HttpClientError.HttpClientError,
+    Scope.Scope
+  >,
+  decode: (
+    response: HttpClientResponse.HttpClientResponse,
+  ) => Effect.Effect<A, HttpClientError.ResponseError | ParseResult.ParseError>,
+): Effect.Effect<A, SonarrError, HttpClient.HttpClient> =>
+  finalize(
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient
+      const response = yield* send(client)
+      yield* ensureSuccess(response)
+      return yield* decode(response)
+    }),
+  )
+
+/**
  * Options shared by every verb. `urlParams` keys with an `undefined` value are
  * dropped from the query string; never pass `null` (it serializes as `"null"`).
  */
@@ -54,35 +81,23 @@ export interface RequestOptions {
   readonly urlParams?: UrlParams.Input | undefined
 }
 
-/**
- * GET against the Sonarr instance and decode the JSON body with `schema`. A
- * reusable primitive — it declares its `HttpClient` requirement rather than baking
- * in a transport; discharge it at the operation edge with `provideTransport`.
- */
+/** GET against the Sonarr instance and decode the JSON body with `schema`. */
 export const getJson = <A, I>(
   config: SonarrConfig,
   schema: Schema.Schema<A, I>,
   path: string,
   options?: RequestOptions,
 ): Effect.Effect<A, SonarrError, HttpClient.HttpClient> =>
-  finalize(
-    Effect.gen(function* () {
-      const client = yield* HttpClient.HttpClient
-      const response = yield* client.get(`${config.baseUrl}${path}`, {
+  request(
+    (client) =>
+      client.get(`${config.baseUrl}${path}`, {
         headers: apiKeyHeader(config),
         urlParams: options?.urlParams,
-      })
-
-      yield* ensureSuccess(response)
-
-      return yield* HttpClientResponse.schemaBodyJson(schema)(response)
-    }),
+      }),
+    HttpClientResponse.schemaBodyJson(schema),
   )
 
-/**
- * POST/PUT a JSON `body` and decode the JSON response with `schema`. Shares the
- * typed failure contract and `HttpClient` requirement with `getJson`.
- */
+/** POST/PUT a JSON `body` and decode the JSON response with `schema`. */
 export const sendJson = <A, I>(
   config: SonarrConfig,
   method: "post" | "put",
@@ -91,19 +106,14 @@ export const sendJson = <A, I>(
   body: unknown,
   options?: RequestOptions,
 ): Effect.Effect<A, SonarrError, HttpClient.HttpClient> =>
-  finalize(
-    Effect.gen(function* () {
-      const client = yield* HttpClient.HttpClient
-      const response = yield* client[method](`${config.baseUrl}${path}`, {
+  request(
+    (client) =>
+      client[method](`${config.baseUrl}${path}`, {
         headers: apiKeyHeader(config),
         urlParams: options?.urlParams,
         body: HttpBody.unsafeJson(body),
-      })
-
-      yield* ensureSuccess(response)
-
-      return yield* HttpClientResponse.schemaBodyJson(schema)(response)
-    }),
+      }),
+    HttpClientResponse.schemaBodyJson(schema),
   )
 
 /**
@@ -115,16 +125,13 @@ export const del = (
   path: string,
   options?: RequestOptions,
 ): Effect.Effect<void, SonarrError, HttpClient.HttpClient> =>
-  finalize(
-    Effect.gen(function* () {
-      const client = yield* HttpClient.HttpClient
-      const response = yield* client.del(`${config.baseUrl}${path}`, {
+  request(
+    (client) =>
+      client.del(`${config.baseUrl}${path}`, {
         headers: apiKeyHeader(config),
         urlParams: options?.urlParams,
-      })
-
-      yield* ensureSuccess(response)
-    }),
+      }),
+    () => Effect.void,
   )
 
 /**
