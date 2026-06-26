@@ -1,8 +1,8 @@
 # Sonarr API coverage
 
 Tracks how much of the [Sonarr v3 API](https://sonarr.tv/docs/api/) (spec:
-[`openapi.json`](https://github.com/Sonarr/Sonarr/blob/develop/src/Sonarr.Api.V3/openapi.json),
-applies to v3 and v4) the `@trugamr/sonarr` SDK and the `@trugamr/sonarr-mcp`
+[`openapi.json`](https://github.com/Sonarr/Sonarr/blob/develop/src/Sonarr.Api.V3/openapi.json))
+the `@trugamr/sonarr` SDK and the `@trugamr/sonarr-mcp`
 server expose. Organized by **resource section** — each section lists its reads
 _and_ writes together; we work through sections, not a global reads-then-writes
 split.

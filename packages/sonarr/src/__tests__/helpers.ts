@@ -2,16 +2,16 @@ import { Cause, Effect, Exit, Option } from "effect"
 import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll } from "vitest"
 import { Sonarr, type SonarrConfigInput, type SonarrService } from "../effect.js"
-import { v3Path } from "../internal/version.js"
+import { apiBase } from "../internal/version.js"
 
 export const baseUrl = "http://sonarr.test"
 export const apiKey = "test-api-key"
 
 /**
  * Absolute URL for a v3 API path on the mocked instance, e.g. `apiUrl("/tag")`.
- * Reuses the SDK's own `v3Path`, so a mocked URL can't drift from the real request.
+ * Reuses the SDK's own `apiBase`, so a mocked URL can't drift from the real prefix.
  */
-export const apiUrl = (path: string): string => `${baseUrl}${v3Path(path)}`
+export const apiUrl = (path: string): string => `${baseUrl}${apiBase}${path}`
 
 /**
  * Resolve a client operation to an Exit, so each test can assert on the success
