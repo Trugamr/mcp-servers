@@ -1,0 +1,15 @@
+# pre-commit: lint then format staged files, auto-fixing and re-staging.
+# Each glob = the file types its tool handles; priority runs lint before format.
+pre-commit:
+  parallel: false
+  commands:
+    lint:
+      priority: 1
+      glob: "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"
+      run: pnpm exec oxlint --fix {staged_files}
+      stage_fixed: true
+    format:
+      priority: 2
+      glob: "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,md,yaml,yml,html}"
+      run: pnpm exec oxfmt {staged_files}
+      stage_fixed: true
