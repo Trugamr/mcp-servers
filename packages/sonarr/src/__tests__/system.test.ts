@@ -2,8 +2,13 @@ import { Cause, Effect, Exit, Option } from "effect"
 import { http, HttpResponse } from "msw"
 import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
-import { Sonarr as SonarrEffect } from "../effect.js"
-import { Sonarr, SonarrDecodeError, SonarrRequestError, SonarrResponseError } from "../index.js"
+import {
+  Sonarr,
+  SonarrDecodeError,
+  SonarrRequestError,
+  SonarrResponseError,
+  type SonarrConfigInput,
+} from "../effect.js"
 import { systemStatusFixture } from "./fixtures/system-status.js"
 
 const baseUrl = "http://sonarr.test"
@@ -16,13 +21,37 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }))
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 
-const sonarr = new Sonarr({ baseUrl, apiKey })
+// Resolve `system.getStatus` against a given config to an Exit, so each test can
+// assert on the success value or read the typed error straight from the failure
+// channel.
+const runStatus = (config: SonarrConfigInput = { baseUrl, apiKey }) =>
+  Effect.flatMap(Sonarr, (sonarr) => sonarr.system.getStatus).pipe(
+    Effect.provide(Sonarr.layer(config)),
+    Effect.runPromiseExit,
+  )
 
-describe("Promise surface — system.getStatus", () => {
+const successOf = <A, E>(exit: Exit.Exit<A, E>): A => {
+  if (Exit.isFailure(exit)) {
+    throw new Error(`expected success: ${Cause.pretty(exit.cause)}`)
+  }
+  return exit.value
+}
+
+// Pull the typed failure out of the channel. A defect (or success) yields `None`
+// here and throws, so every error test also proves the failure is typed — not a
+// thrown exception or an Effect defect.
+const failureOf = <A, E>(exit: Exit.Exit<A, E>): E => {
+  if (Exit.isSuccess(exit)) {
+    throw new Error("expected failure, got success")
+  }
+  return Option.getOrThrow(Cause.failureOption(exit.cause))
+}
+
+describe("Sonarr service — system.getStatus", () => {
   it("decodes a valid status response", async () => {
     server.use(http.get(statusUrl, () => HttpResponse.json(systemStatusFixture)))
 
-    const status = await sonarr.system.getStatus()
+    const status = successOf(await runStatus())
 
     expect(status.appName).toBe("Sonarr")
     expect(status.version).toBe(systemStatusFixture.version)
@@ -37,7 +66,7 @@ describe("Promise surface — system.getStatus", () => {
       }),
     )
 
-    await sonarr.system.getStatus()
+    successOf(await runStatus())
 
     expect(received).toBe(apiKey)
   })
@@ -45,61 +74,39 @@ describe("Promise surface — system.getStatus", () => {
   it("normalizes a trailing slash in baseUrl so the request path stays clean", async () => {
     // The handler is registered for `statusUrl` (single slash). With
     // `onUnhandledRequest: "error"`, a baseUrl that left its trailing slash in
-    // place would hit `…test//api/v3/…` and fail to match — so this resolving
-    // proves `decodeConfig`'s normalization is actually wired into the request.
+    // place would hit `…test//api/v3/…` and fail to match — so this succeeding
+    // proves `decodeConfig`'s normalization is wired into the request.
     server.use(http.get(statusUrl, () => HttpResponse.json(systemStatusFixture)))
 
-    const client = new Sonarr({ baseUrl: `${baseUrl}/`, apiKey })
+    const status = successOf(await runStatus({ baseUrl: `${baseUrl}/`, apiKey }))
 
-    await expect(client.system.getStatus()).resolves.toMatchObject({ appName: "Sonarr" })
+    expect(status.appName).toBe("Sonarr")
   })
 
-  it("rejects with SonarrResponseError carrying the status code on a 401", async () => {
+  it("fails with a typed SonarrResponseError carrying the status code on a 401", async () => {
     server.use(http.get(statusUrl, () => new HttpResponse(null, { status: 401 })))
 
-    const error = await sonarr.system.getStatus().catch((e: unknown) => e)
+    const error = failureOf(await runStatus())
 
     expect(error).toBeInstanceOf(SonarrResponseError)
-    expect((error as SonarrResponseError).status).toBe(401)
+    if (error instanceof SonarrResponseError) {
+      expect(error.status).toBe(401)
+    }
   })
 
-  it("rejects with SonarrRequestError when Sonarr is unreachable", async () => {
+  it("fails with a typed SonarrRequestError when Sonarr is unreachable", async () => {
     server.use(http.get(statusUrl, () => HttpResponse.error()))
 
-    const error = await sonarr.system.getStatus().catch((e: unknown) => e)
+    const error = failureOf(await runStatus())
 
     expect(error).toBeInstanceOf(SonarrRequestError)
   })
 
-  it("rejects with SonarrDecodeError on a malformed body", async () => {
+  it("fails with a typed SonarrDecodeError on a malformed body", async () => {
     server.use(http.get(statusUrl, () => HttpResponse.json({ nope: true })))
 
-    await expect(sonarr.system.getStatus()).rejects.toBeInstanceOf(SonarrDecodeError)
-  })
-})
+    const error = failureOf(await runStatus())
 
-describe("Effect surface — Sonarr service", () => {
-  const layer = SonarrEffect.layer({ baseUrl, apiKey })
-  const status = Effect.flatMap(SonarrEffect, (s) => s.system.getStatus).pipe(Effect.provide(layer))
-
-  it("decodes a valid status response", async () => {
-    server.use(http.get(statusUrl, () => HttpResponse.json(systemStatusFixture)))
-
-    const result = await Effect.runPromise(status)
-
-    expect(result.version).toBe(systemStatusFixture.version)
-  })
-
-  it("puts a typed SonarrResponseError in the failure channel — no throw, no defect", async () => {
-    server.use(http.get(statusUrl, () => new HttpResponse(null, { status: 500 })))
-
-    const exit = await Effect.runPromiseExit(status)
-
-    expect(Exit.isFailure(exit)).toBe(true)
-    const failure = Exit.isFailure(exit) ? Cause.failureOption(exit.cause) : Option.none()
-    expect(Option.isSome(failure)).toBe(true)
-    const error = Option.getOrThrow(failure)
-    expect(error).toBeInstanceOf(SonarrResponseError)
-    expect((error as SonarrResponseError).status).toBe(500)
+    expect(error).toBeInstanceOf(SonarrDecodeError)
   })
 })
