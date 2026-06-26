@@ -19,6 +19,8 @@ jobs:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 15 # bound runaway/abusive jobs
+    env:
+      TURBO_TELEMETRY_DISABLED: "1" # no anonymous telemetry in CI
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -37,6 +39,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
 
       - name: Lint
         run: pnpm lint # script carries --deny-warnings, so warnings fail

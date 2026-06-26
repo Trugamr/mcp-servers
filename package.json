@@ -3,14 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
     "lint": "oxlint --deny-warnings",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "check": "pnpm build && pnpm lint && pnpm format:check && pnpm typecheck && pnpm test"
+    "test": "turbo run test",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -21,6 +20,7 @@
     "oxfmt": "0.56.0",
     "oxlint": "1.71.0",
     "tsdown": "0.22.3",
+    "turbo": "2.10.0",
     "typescript": "6.0.3",
     "vitest": "4.1.9"
   },

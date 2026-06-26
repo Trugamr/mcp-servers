@@ -15,7 +15,8 @@
   },
   "scripts": {
     "build": "tsdown",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@effect/platform": "0.96.2",
