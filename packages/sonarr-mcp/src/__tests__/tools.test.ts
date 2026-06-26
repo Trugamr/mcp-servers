@@ -1,9 +1,16 @@
 import { Sonarr, type SonarrService } from "@trugamr/sonarr/effect"
-import { Cause, Effect, Exit, Option } from "effect"
+import { Cause, Effect, Exit, Option, Schema, SchemaAST } from "effect"
 import { http, HttpResponse } from "msw"
 import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
-import { createTag, getSeries, getSystemStatus, listEpisodes, listSeries } from "../tools.js"
+import {
+  createTag,
+  getSeries,
+  getSystemStatus,
+  listEpisodes,
+  listSeries,
+  SonarrToolkit,
+} from "../tools.js"
 import { episodeFixture } from "./fixtures/episode.js"
 import { seriesFixture } from "./fixtures/series.js"
 import { systemStatusFixture } from "./fixtures/system-status.js"
@@ -102,5 +109,34 @@ describe("library tool handlers", () => {
       _tag: "SonarrResponseError",
       message: "Sonarr returned HTTP 401",
     })
+  })
+})
+
+// MCP requires a tool result's `structuredContent` to be a JSON object, and
+// @effect/ai drops the *encoded* success value straight into that field. So a
+// tool's success schema must encode to an object — a struct (`TypeLiteral`) — or
+// to void, which @effect/ai omits. The encoded AST is what matters: a schema with
+// nullable fields is a `Transformation` until encoded. A bare array (`TupleType`)
+// is the shape clients reject with `expected: "record"`.
+const objectShapedSuccess = ["TypeLiteral", "VoidKeyword"]
+
+describe("tool success schemas are MCP-valid structured content", () => {
+  for (const tool of Object.values(SonarrToolkit.tools)) {
+    it(`${tool.name} encodes to an object (or void)`, () => {
+      const encoded = SchemaAST.encodedAST(tool.successSchema.ast)
+      expect(objectShapedSuccess.includes(encoded._tag)).toBe(true)
+    })
+  }
+})
+
+describe("structured content round-trip", () => {
+  it("list_series encodes to a JSON object, not a bare array", async () => {
+    server.use(http.get(apiUrl("/series"), () => HttpResponse.json([seriesFixture])))
+
+    const result = await Effect.runPromise(run(listSeries))
+    const encoded = Schema.encodeSync(SonarrToolkit.tools.list_series.successSchema)(result)
+
+    expect(typeof encoded).toBe("object")
+    expect(Array.isArray(encoded)).toBe(false)
   })
 })
