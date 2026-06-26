@@ -1,5 +1,6 @@
-# pre-commit: lint then format staged files, auto-fixing and re-staging.
-# Each glob = the file types its tool handles; priority runs lint before format.
+# pre-commit: lint + format staged files (auto-fix, re-stage), then typecheck.
+# lint/format act on staged files; typecheck builds the workspace first (so
+# cross-package imports resolve to built dist) and checks the whole project.
 pre-commit:
   parallel: false
   commands:
@@ -13,3 +14,7 @@ pre-commit:
       glob: "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,md,yaml,yml,html}"
       run: pnpm exec oxfmt {staged_files}
       stage_fixed: true
+    typecheck:
+      priority: 3
+      glob: "*.{ts,tsx,mts,cts}"
+      run: pnpm build && pnpm typecheck

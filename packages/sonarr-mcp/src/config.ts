@@ -3,9 +3,10 @@ import { Config, Effect, Layer, Redacted } from "effect"
 
 /**
  * The Sonarr client, built from `SONARR_BASE_URL` / `SONARR_API_KEY`. The API key
- * is read as a `Redacted` secret (kept out of any config-error output) and unwrapped
- * only when handed to the SDK, which re-wraps it. Missing or malformed values fail
- * the layer, so the server refuses to start rather than failing on the first call.
+ * is read with `Config.redacted` and unwrapped at the SDK boundary, which re-wraps
+ * it as `Redacted` for storage — that stored form is what keeps it out of logs and
+ * errors. Missing or malformed values fail the layer, so the server refuses to
+ * start rather than failing on the first call.
  */
 export const SonarrLive = Layer.unwrapEffect(
   Effect.gen(function* () {

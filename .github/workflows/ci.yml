@@ -44,14 +44,14 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
+      - name: Build
+        run: pnpm build # build first so consumers resolve built dist (not source)
+
       - name: Typecheck
         run: pnpm typecheck
 
       - name: Test
         run: pnpm test
-
-      - name: Build
-        run: pnpm build
 
   actionlint:
     name: Lint workflows
