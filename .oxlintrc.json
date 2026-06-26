@@ -1,0 +1,11 @@
+{
+  "plugins": ["typescript", "unicorn"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "curly": ["error", "all"]
+  },
+  "ignorePatterns": ["**/dist/**", "**/coverage/**"]
+}
