@@ -11,6 +11,7 @@ import {
   Tag,
 } from "@trugamr/sonarr/effect"
 import { Tool, Toolkit } from "@effect/ai"
+import { isPast, parseISO } from "date-fns"
 import { Context, Effect, Encoding, Order, Predicate, Schema } from "effect"
 
 /** Tool-call failure shape returned to the model when a Sonarr call fails. */
@@ -331,7 +332,7 @@ const EpisodeSort = Schema.Array(
 type EpisodeSortValue = Schema.Schema.Type<typeof EpisodeSort>
 
 const episodeAired = (episode: Episode) =>
-  Predicate.isNotNullable(episode.airDateUtc) && Date.parse(episode.airDateUtc) <= Date.now()
+  Predicate.isNotNullable(episode.airDateUtc) && isPast(parseISO(episode.airDateUtc))
 
 // `series.id`/`season.number` scope the Sonarr fetch, so they're applied
 // server-side, not here — this narrows the fetched episodes by the remaining fields.
