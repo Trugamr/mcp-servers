@@ -88,6 +88,8 @@ type TextOp = Schema.Schema.Type<typeof Text>
 type BoolOp = Schema.Schema.Type<typeof Bool>
 
 const isDefined = <T>(value: T): value is Exclude<T, undefined> => value !== undefined
+const isNil = <T>(value: T): value is Extract<T, null | undefined> =>
+  value === null || value === undefined
 
 // Each matcher returns true when the value satisfies every present operator (an
 // absent operator is a no-op), so a missing filter short-circuits to `true`.
@@ -100,7 +102,7 @@ const matchEq = <T>(v: T, f?: EqOp<T>) =>
 // A null/absent value fails any present ordered constraint.
 const matchOrd = <T extends string | number>(v: T | null | undefined, f?: OrdOp<T>) =>
   !f ||
-  (v != null &&
+  (!isNil(v) &&
     matchEq(v, f) &&
     (!isDefined(f.gte) || v >= f.gte) &&
     (!isDefined(f.lte) || v <= f.lte) &&
@@ -307,7 +309,7 @@ const EpisodeSort = Schema.Array(
 )
 type EpisodeSortValue = Schema.Schema.Type<typeof EpisodeSort>
 
-const episodeAired = (e: Episode) => e.airDateUtc != null && Date.parse(e.airDateUtc) <= Date.now()
+const episodeAired = (e: Episode) => !isNil(e.airDateUtc) && Date.parse(e.airDateUtc) <= Date.now()
 
 const matchesEpisode = (e: Episode, f: EpisodeFilterValue = {}) =>
   matchText(e.title, f.title) &&
@@ -327,8 +329,8 @@ const byAirDate =
   (x, y) => {
     const ax = x.airDateUtc
     const ay = y.airDateUtc
-    if (ax == null || ay == null) {
-      return ax == null ? (ay == null ? 0 : 1) : -1
+    if (isNil(ax) || isNil(ay)) {
+      return isNil(ax) ? (isNil(ay) ? 0 : 1) : -1
     }
     return order === "asc" ? Order.string(ax, ay) : Order.string(ay, ax)
   }
