@@ -14,3 +14,9 @@ coverage
 .DS_Store
 Dockerfile
 .dockerignore
+
+# Never copy local env secrets into the build context or image layers.
+.env
+.env.*
+**/.env
+**/.env.*
