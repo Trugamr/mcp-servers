@@ -89,7 +89,7 @@ type BoolOp = Schema.Schema.Type<typeof Bool>
 
 const isDefined = <T>(value: T): value is Exclude<T, undefined> => value !== undefined
 const isNil = <T>(value: T): value is Extract<T, null | undefined> =>
-  value === null || value === undefined
+  !isDefined(value) || value === null
 
 // Each matcher returns true when the value satisfies every present operator (an
 // absent operator is a no-op), so a missing filter short-circuits to `true`.
