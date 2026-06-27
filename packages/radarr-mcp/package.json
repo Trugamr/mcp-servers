@@ -1,0 +1,34 @@
+{
+  "name": "@trugamr/radarr-mcp",
+  "version": "0.0.0",
+  "description": "MCP server exposing the Radarr SDK to AI agents as tools (stdio + HTTP).",
+  "bin": {
+    "radarr-mcp": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsgo --noEmit",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@effect/ai": "0.36.0",
+    "@effect/cli": "0.75.2",
+    "@effect/experimental": "0.60.0",
+    "@effect/platform": "0.96.2",
+    "@effect/platform-node": "0.107.0",
+    "@effect/printer": "0.49.0",
+    "@effect/printer-ansi": "0.49.0",
+    "@effect/rpc": "0.75.1",
+    "@trugamr/radarr": "workspace:*",
+    "effect": "3.21.4"
+  },
+  "devDependencies": {
+    "@trugamr/testkit": "workspace:*"
+  }
+}
