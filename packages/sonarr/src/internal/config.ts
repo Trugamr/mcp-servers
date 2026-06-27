@@ -1,25 +1,14 @@
+import { ApiKey, BaseUrl } from "@trugamr/kit"
 import { Schema } from "effect"
 
-/**
- * `baseUrl` must be absolute http(s); its trailing slashes are stripped during
- * decode so joined request paths never produce a double slash.
- */
-const BaseUrl = Schema.transform(
-  Schema.String.pipe(Schema.pattern(/^https?:\/\//)),
-  Schema.String,
-  {
-    strict: true,
-    decode: (url) => url.replace(/\/+$/, ""),
-    encode: (url) => url,
-  },
-)
-
 export const SonarrConfig = Schema.Struct({
+  // Absolute http(s); trailing slashes stripped during decode so joined request
+  // paths never double up. See `@trugamr/kit`.
   baseUrl: BaseUrl,
   // Stored as `Redacted` so the key prints as `<redacted>` in logs, errors, and
-  // `JSON.stringify`. Input stays a plain string; unwrap with `Redacted.value`
-  // only at the request boundary.
-  apiKey: Schema.Redacted(Schema.String.pipe(Schema.minLength(1))),
+  // `JSON.stringify`. Input stays a plain string; unwrapped only at the request
+  // boundary. See `@trugamr/kit`.
+  apiKey: ApiKey,
 })
 
 export type SonarrConfig = Schema.Schema.Type<typeof SonarrConfig>

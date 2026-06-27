@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { optionalNullable } from "./optional.js"
+import { optionalNullable } from "@trugamr/kit"
 
 /**
  * `GET /api/v3/health` — an active health-check message. `type` is the severity
