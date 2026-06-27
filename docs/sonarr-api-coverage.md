@@ -19,6 +19,10 @@ filtering, sorting, and paging happen in the MCP layer:
 - **filter** — a per-field object with explicit operators: `eq`/`ne`/`in`/`nin`,
   `gte`/`lte`/`gt`/`lt` (ordered fields), `contains` (text).
   e.g. `{ filter: { status: { in: ["ended"] }, year: { gte: 2015 } } }`.
+  Relationship scope uses JSON:API dot-notation keys with an `eq`-only value —
+  `list_episodes` requires `filter["series.id"]: { eq }` and takes an optional
+  `filter["season.number"]: { eq }`; these map to Sonarr's `seriesId`/`seasonNumber`
+  query params (applied server-side), and the remaining fields filter client-side.
 - **sort** — `[{ field, order }]`; `order` is `asc` (default) or `desc`, multi-field.
 - **page** — opaque cursor pagination: `{ size?, cursor? }` in; the result envelope is
   `{ items, nextCursor?, totalRecords }` (`nextCursor` absent on the last page,

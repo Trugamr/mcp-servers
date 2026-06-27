@@ -79,6 +79,12 @@ const Text = Schema.Struct({
 })
 /** Boolean operator. */
 const Bool = Schema.Struct({ eq: Schema.optional(Schema.Boolean) })
+/**
+ * Single-value scope filter — only `eq`. For relationship-scope fields (e.g.
+ * `series.id`, `season.number`) that map to Sonarr query params, which accept one
+ * value with no ranges or set membership.
+ */
+const ScopeEq = <A, I>(s: Schema.Schema<A, I>) => Schema.Struct({ eq: s })
 
 // Operator-object value types are derived from the schema builders, so the
 // matchers can't drift from the schemas they validate against.
@@ -291,6 +297,14 @@ const toEpisodeSummary = (e: Episode): EpisodeSummary => ({
 })
 
 const EpisodeFilter = Schema.Struct({
+  "series.id": ScopeEq(Schema.Number).annotations({
+    description: "Series whose episodes to fetch (required; sent to Sonarr as seriesId).",
+  }),
+  "season.number": Schema.optional(
+    ScopeEq(Schema.Number).annotations({
+      description: "Restrict to one season (sent to Sonarr as seasonNumber).",
+    }),
+  ),
   title: Schema.optional(
     Text.annotations({ description: "Match the episode title (text operators)." }),
   ),
@@ -316,7 +330,9 @@ type EpisodeSortValue = Schema.Schema.Type<typeof EpisodeSort>
 
 const episodeAired = (e: Episode) => !isNil(e.airDateUtc) && Date.parse(e.airDateUtc) <= Date.now()
 
-const matchesEpisode = (e: Episode, f: EpisodeFilterValue = {}) =>
+// `series.id`/`season.number` scope the Sonarr fetch, so they're applied
+// server-side, not here — this narrows the fetched episodes by the remaining fields.
+const matchesEpisode = (e: Episode, f: EpisodeFilterValue) =>
   matchText(e.title, f.title) &&
   matchBoolean(e.monitored, f.monitored) &&
   matchBoolean(e.hasFile, f.hasFile) &&
@@ -387,18 +403,11 @@ const GetSeries = Tool.make("get_series", {
 const ListEpisodes = Tool.make("list_episodes", {
   description:
     "List episodes for a series (optionally one season) as lean summaries; filter, sort, " +
-    "and paginate (opaque cursor). seriesId/seasonNumber scope the Sonarr fetch; filter " +
-    "narrows the fetched episodes client-side.",
+    "and paginate (opaque cursor). filter['series.id'] is required and scopes the Sonarr " +
+    "fetch (with optional filter['season.number']); the remaining filters narrow the " +
+    "fetched episodes client-side.",
   parameters: {
-    seriesId: Schema.Number.annotations({
-      description: "Series whose episodes to fetch (required; sent to Sonarr).",
-    }),
-    seasonNumber: Schema.optional(
-      Schema.Number.annotations({
-        description: "Restrict the fetch to one season (sent to Sonarr).",
-      }),
-    ),
-    filter: Schema.optional(EpisodeFilter),
+    filter: EpisodeFilter,
     sort: Schema.optional(EpisodeSort),
     page: Schema.optional(PageInput),
   },
@@ -478,9 +487,7 @@ export interface SeriesListArgs {
 }
 
 export interface EpisodeListArgs {
-  readonly seriesId: number
-  readonly seasonNumber?: number | undefined
-  readonly filter?: EpisodeFilterValue | undefined
+  readonly filter: EpisodeFilterValue
   readonly sort?: EpisodeSortValue | undefined
   readonly page?: PageInputValue | undefined
 }
@@ -506,7 +513,12 @@ export const getSeries = (sonarr: SonarrService, seriesId: number) =>
 export const listEpisodes = (sonarr: SonarrService, p: EpisodeListArgs) =>
   decodeCursor(p.page?.cursor).pipe(
     Effect.flatMap((offset) =>
-      handle(sonarr.episode.list({ seriesId: p.seriesId, seasonNumber: p.seasonNumber })).pipe(
+      handle(
+        sonarr.episode.list({
+          seriesId: p.filter["series.id"].eq,
+          seasonNumber: p.filter["season.number"]?.eq,
+        }),
+      ).pipe(
         Effect.map((all) => {
           const filtered = all.filter((e) => matchesEpisode(e, p.filter))
           const sorted = filtered.toSorted(episodeOrder(p.sort))
