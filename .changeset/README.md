@@ -4,7 +4,7 @@ This folder is managed by [Changesets](https://github.com/changesets/changesets)
 
 ## Adding a changeset
 
-When a PR changes a published package (`@trugamr/sonarr`, `@trugamr/sonarr-mcp`), run:
+When a PR changes a published package (`@trugamr/sonarr`, `@trugamr/radarr`, `@trugamr/sonarr-mcp`), run:
 
 ```bash
 pnpm changeset
@@ -12,8 +12,8 @@ pnpm changeset
 
 Pick the affected packages, choose `patch` / `minor` / `major`, and write a short summary. Commit the generated `.changeset/*.md` file with your PR. The summary becomes the changelog entry.
 
-`@trugamr/testkit` is private and source-only — it is never versioned or published, so it never needs a changeset.
+`@trugamr/kit` and `@trugamr/testkit` are private and source-only — they are never versioned or published, so they never need a changeset.
 
 ## Releasing
 
-On merge to `main`, the release workflow opens a **"Version Packages"** PR that applies the pending changesets (bumps versions, writes `CHANGELOG.md`, deletes the consumed files). Merging that PR tags the release and publishes the versioned container image. You never bump versions or tag by hand.
+On merge to `main`, the release workflow opens a **"Version Packages"** PR that applies the pending changesets (bumps versions, writes `CHANGELOG.md`, deletes the consumed files). Merging that PR publishes the packages to npm, tags the release, and publishes the versioned container image. You never bump versions or tag by hand.
