@@ -11,7 +11,7 @@ import {
   Tag,
 } from "@trugamr/sonarr/effect"
 import { Tool, Toolkit } from "@effect/ai"
-import { Context, Effect, Either, Encoding, Schema } from "effect"
+import { Context, Effect, Either, Encoding, Order, Schema } from "effect"
 
 /** Tool-call failure shape returned to the model when a Sonarr call fails. */
 const ToolError = Schema.Struct({
@@ -86,27 +86,12 @@ const Text = Schema.Struct({
 /** Boolean operator. */
 const Bool = Schema.Struct({ eq: Schema.optional(Schema.Boolean) })
 
-// Operator-object value types mirror what `Schema.optional` produces — each
-// property is optional *and* may be `undefined` (the repo runs with
-// `exactOptionalPropertyTypes`, so the two are distinct and must match).
-type EqOp<T> = {
-  readonly eq?: T | undefined
-  readonly ne?: T | undefined
-  readonly in?: ReadonlyArray<T> | undefined
-  readonly nin?: ReadonlyArray<T> | undefined
-}
-type OrdOp<T> = EqOp<T> & {
-  readonly gte?: T | undefined
-  readonly lte?: T | undefined
-  readonly gt?: T | undefined
-  readonly lt?: T | undefined
-}
-type TextOp = {
-  readonly eq?: string | undefined
-  readonly ne?: string | undefined
-  readonly contains?: string | undefined
-  readonly in?: ReadonlyArray<string> | undefined
-}
+// Operator-object value types are derived from the schema builders, so the
+// matchers can't drift from the schemas they validate against.
+type EqOp<A> = Schema.Schema.Type<ReturnType<typeof Eq<A, A>>>
+type OrdOp<A> = Schema.Schema.Type<ReturnType<typeof Ord<A, A>>>
+type TextOp = Schema.Schema.Type<typeof Text>
+type BoolOp = Schema.Schema.Type<typeof Bool>
 
 // Each matcher returns true when the value satisfies every present operator (an
 // absent operator is a no-op). Written as boolean expressions so a missing filter
@@ -136,31 +121,10 @@ const matchText = (v: string | null | undefined, f?: TextOp) => {
       (f.in === undefined || f.in.includes(s)))
   )
 }
-const matchBool = (v: boolean, f?: { readonly eq?: boolean | undefined }) =>
-  !f || f.eq === undefined || v === f.eq
+const matchBool = (v: boolean, f?: BoolOp) => !f || f.eq === undefined || v === f.eq
 
 const clamp = (n: number, lo: number, hi: number) =>
   Math.min(Math.max(Math.trunc(Number.isFinite(n) ? n : lo), lo), hi)
-/** Compose comparators: the first non-zero result wins (multi-field sort). */
-const combine =
-  <A>(cmps: ReadonlyArray<(x: A, y: A) => number>) =>
-  (x: A, y: A) => {
-    for (const c of cmps) {
-      const r = c(x, y)
-      if (r !== 0) {
-        return r
-      }
-    }
-    return 0
-  }
-const compareBy =
-  <A>(key: (a: A) => string | number, order: "asc" | "desc") =>
-  (x: A, y: A) => {
-    const a = key(x)
-    const b = key(y)
-    const c = a < b ? -1 : a > b ? 1 : 0
-    return order === "asc" ? c : -c
-  }
 
 /** Pagination input: `page[size]` (a hint, clamped) + `page[cursor]` (opaque). */
 const PageInput = Schema.Struct({
@@ -255,10 +219,10 @@ const toSeriesSummary = (s: Series): SeriesSummary => ({
   ...(s.path !== undefined ? { path: s.path } : {}),
 })
 
-const seriesSortKey: Record<"title" | "year" | "added", (s: Series) => string | number> = {
-  title: (s) => s.title.toLowerCase(),
-  year: (s) => s.year,
-  added: (s) => s.added, // ISO 8601 string sorts chronologically
+const seriesOrders: Record<"title" | "year" | "added", Order.Order<Series>> = {
+  title: Order.mapInput(Order.string, (s: Series) => s.title.toLowerCase()),
+  year: Order.mapInput(Order.number, (s: Series) => s.year),
+  added: Order.mapInput(Order.string, (s: Series) => s.added), // ISO 8601 sorts chronologically
 }
 
 const SeriesFilter = Schema.Struct({
@@ -300,10 +264,10 @@ const matchesSeries = (s: Series, f: SeriesFilterValue = {}) =>
   matchText(s.network, f.network) &&
   matchOrd(s.year, f.year)
 
-const seriesComparator = (sort: SeriesSortValue = []) =>
-  combine(
+const seriesOrder = (sort: SeriesSortValue = []) =>
+  Order.combineAll(
     (sort.length ? sort : [{ field: "title" as const }]).map((s) =>
-      compareBy(seriesSortKey[s.field], s.order ?? "asc"),
+      s.order === "desc" ? Order.reverse(seriesOrders[s.field]) : seriesOrders[s.field],
     ),
   )
 
@@ -370,27 +334,36 @@ const matchesEpisode = (e: Episode, f: EpisodeFilterValue = {}) =>
   matchOrd(e.airDateUtc, f.airDate) &&
   (f.hasAired === undefined || f.hasAired === episodeAired(e))
 
-const compareEpisodeField = (field: "episode" | "airDate", order: "asc" | "desc") =>
-  field === "airDate"
-    ? (x: Episode, y: Episode) => {
-        // Sort by UTC air date, nulls last regardless of direction.
-        const ax = x.airDateUtc
-        const ay = y.airDateUtc
-        if (ax == null || ay == null) {
-          return ax == null ? (ay == null ? 0 : 1) : -1
-        }
-        const c = ax < ay ? -1 : ax > ay ? 1 : 0
-        return order === "asc" ? c : -c
-      }
-    : (x: Episode, y: Episode) => {
-        const c = x.seasonNumber - y.seasonNumber || x.episodeNumber - y.episodeNumber
-        return order === "asc" ? c : -c
-      }
+const byEpisodeNumber: Order.Order<Episode> = Order.combine(
+  Order.mapInput(Order.number, (e: Episode) => e.seasonNumber),
+  Order.mapInput(Order.number, (e: Episode) => e.episodeNumber),
+)
+// Sort by UTC air date, nulls last regardless of direction.
+const byAirDate =
+  (order: "asc" | "desc"): Order.Order<Episode> =>
+  (x, y) => {
+    const ax = x.airDateUtc
+    const ay = y.airDateUtc
+    if (ax == null || ay == null) {
+      return ax == null ? (ay == null ? 0 : 1) : -1
+    }
+    return order === "asc" ? Order.string(ax, ay) : Order.string(ay, ax)
+  }
 
-const episodeComparator = (sort: EpisodeSortValue = []) =>
-  combine(
+const episodeFieldOrder = (
+  field: "episode" | "airDate",
+  order: "asc" | "desc",
+): Order.Order<Episode> =>
+  field === "airDate"
+    ? byAirDate(order)
+    : order === "desc"
+      ? Order.reverse(byEpisodeNumber)
+      : byEpisodeNumber
+
+const episodeOrder = (sort: EpisodeSortValue = []) =>
+  Order.combineAll(
     (sort.length ? sort : [{ field: "episode" as const }]).map((s) =>
-      compareEpisodeField(s.field, s.order ?? "asc"),
+      episodeFieldOrder(s.field, s.order ?? "asc"),
     ),
   )
 
@@ -525,7 +498,7 @@ export const listSeries = (sonarr: SonarrService, p: SeriesListArgs = {}) =>
       handle(sonarr.series.list).pipe(
         Effect.map((all) => {
           const filtered = all.filter((s) => matchesSeries(s, p.filter))
-          const sorted = filtered.toSorted(seriesComparator(p.sort))
+          const sorted = filtered.toSorted(seriesOrder(p.sort))
           return pageByCursor(sorted, offset, p.page?.size, toSeriesSummary)
         }),
       ),
@@ -541,7 +514,7 @@ export const listEpisodes = (sonarr: SonarrService, p: EpisodeListArgs) =>
       handle(sonarr.episode.list({ seriesId: p.seriesId, seasonNumber: p.seasonNumber })).pipe(
         Effect.map((all) => {
           const filtered = all.filter((e) => matchesEpisode(e, p.filter))
-          const sorted = filtered.toSorted(episodeComparator(p.sort))
+          const sorted = filtered.toSorted(episodeOrder(p.sort))
           return pageByCursor(sorted, offset, p.page?.size, toEpisodeSummary)
         }),
       ),
