@@ -88,9 +88,7 @@ describe("library tool handlers", () => {
       }),
     )
 
-    await Effect.runPromise(
-      run((sonarr) => listEpisodes(sonarr, { filter: { seriesId: 5, seasonNumber: 2 } })),
-    )
+    await Effect.runPromise(run((sonarr) => listEpisodes(sonarr, { seriesId: 5, seasonNumber: 2 })))
 
     expect(url?.searchParams.get("seriesId")).toBe("5")
     expect(url?.searchParams.get("seasonNumber")).toBe("2")
@@ -312,21 +310,21 @@ describe("list_episodes query surface", () => {
     expect(
       ids(
         await Effect.runPromise(
-          run((s) => listEpisodes(s, { filter: { seriesId: 5, missing: true } })),
+          run((s) => listEpisodes(s, { seriesId: 5, filter: { missing: true } })),
         ),
       ),
     ).toEqual([2, 3])
     expect(
       ids(
         await Effect.runPromise(
-          run((s) => listEpisodes(s, { filter: { seriesId: 5, hasAired: true } })),
+          run((s) => listEpisodes(s, { seriesId: 5, filter: { hasAired: true } })),
         ),
       ),
     ).toEqual([1, 2])
     expect(
       ids(
         await Effect.runPromise(
-          run((s) => listEpisodes(s, { filter: { seriesId: 5, missing: true, hasAired: true } })),
+          run((s) => listEpisodes(s, { seriesId: 5, filter: { missing: true, hasAired: true } })),
         ),
       ),
     ).toEqual([2])
@@ -338,19 +336,15 @@ describe("list_episodes query surface", () => {
     const win = await Effect.runPromise(
       run((s) =>
         listEpisodes(s, {
-          filter: {
-            seriesId: 5,
-            airDate: { gte: "2010-01-05T00:00:00Z", lt: "2999-01-01T00:00:00Z" },
-          },
+          seriesId: 5,
+          filter: { airDate: { gte: "2010-01-05T00:00:00Z", lt: "2999-01-01T00:00:00Z" } },
         }),
       ),
     )
     expect(win.items.map((i) => i.id)).toEqual([2])
 
     const sorted = await Effect.runPromise(
-      run((s) =>
-        listEpisodes(s, { filter: { seriesId: 5 }, sort: [{ field: "airDate", order: "desc" }] }),
-      ),
+      run((s) => listEpisodes(s, { seriesId: 5, sort: [{ field: "airDate", order: "desc" }] })),
     )
     expect(sorted.items.map((i) => i.id)).toEqual([3, 2, 1])
     expect(sorted.items[0]).toHaveProperty("overview")

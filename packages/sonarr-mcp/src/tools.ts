@@ -291,14 +291,6 @@ const toEpisodeSummary = (e: Episode): EpisodeSummary => ({
 })
 
 const EpisodeFilter = Schema.Struct({
-  seriesId: Schema.Number.annotations({
-    description: "Series whose episodes to fetch (required; sent to Sonarr).",
-  }),
-  seasonNumber: Schema.optional(
-    Schema.Number.annotations({
-      description: "Restrict the fetch to one season (sent to Sonarr).",
-    }),
-  ),
   title: Schema.optional(
     Text.annotations({ description: "Match the episode title (text operators)." }),
   ),
@@ -324,7 +316,7 @@ type EpisodeSortValue = Schema.Schema.Type<typeof EpisodeSort>
 
 const episodeAired = (e: Episode) => !isNil(e.airDateUtc) && Date.parse(e.airDateUtc) <= Date.now()
 
-const matchesEpisode = (e: Episode, f: EpisodeFilterValue) =>
+const matchesEpisode = (e: Episode, f: EpisodeFilterValue = {}) =>
   matchText(e.title, f.title) &&
   matchBoolean(e.monitored, f.monitored) &&
   matchBoolean(e.hasFile, f.hasFile) &&
@@ -394,10 +386,19 @@ const GetSeries = Tool.make("get_series", {
 
 const ListEpisodes = Tool.make("list_episodes", {
   description:
-    "List a series' episodes as lean summaries; filter, sort, and paginate (opaque cursor). " +
-    "filter.seriesId/seasonNumber scope the Sonarr fetch; the rest narrows it client-side.",
+    "List episodes for a series (optionally one season) as lean summaries; filter, sort, " +
+    "and paginate (opaque cursor). seriesId/seasonNumber scope the Sonarr fetch; filter " +
+    "narrows the fetched episodes client-side.",
   parameters: {
-    filter: EpisodeFilter,
+    seriesId: Schema.Number.annotations({
+      description: "Series whose episodes to fetch (required; sent to Sonarr).",
+    }),
+    seasonNumber: Schema.optional(
+      Schema.Number.annotations({
+        description: "Restrict the fetch to one season (sent to Sonarr).",
+      }),
+    ),
+    filter: Schema.optional(EpisodeFilter),
     sort: Schema.optional(EpisodeSort),
     page: Schema.optional(PageInput),
   },
@@ -477,7 +478,9 @@ export interface SeriesListArgs {
 }
 
 export interface EpisodeListArgs {
-  readonly filter: EpisodeFilterValue
+  readonly seriesId: number
+  readonly seasonNumber?: number | undefined
+  readonly filter?: EpisodeFilterValue | undefined
   readonly sort?: EpisodeSortValue | undefined
   readonly page?: PageInputValue | undefined
 }
@@ -503,9 +506,7 @@ export const getSeries = (sonarr: SonarrService, seriesId: number) =>
 export const listEpisodes = (sonarr: SonarrService, p: EpisodeListArgs) =>
   decodeCursor(p.page?.cursor).pipe(
     Effect.flatMap((offset) =>
-      handle(
-        sonarr.episode.list({ seriesId: p.filter.seriesId, seasonNumber: p.filter.seasonNumber }),
-      ).pipe(
+      handle(sonarr.episode.list({ seriesId: p.seriesId, seasonNumber: p.seasonNumber })).pipe(
         Effect.map((all) => {
           const filtered = all.filter((e) => matchesEpisode(e, p.filter))
           const sorted = filtered.toSorted(episodeOrder(p.sort))
