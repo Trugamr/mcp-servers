@@ -1,10 +1,11 @@
 import { McpServer } from "@effect/ai"
-import { HttpApp, HttpBody, HttpRouter, HttpServer, HttpServerResponse } from "@effect/platform"
+import { HttpRouter, HttpServer } from "@effect/platform"
 import { NodeHttpServer, NodeSink, NodeStream } from "@effect/platform-node"
-import { Effect, Layer, Logger } from "effect"
+import { Layer, Logger } from "effect"
 import { createServer } from "node:http"
 import pkg from "../package.json" with { type: "json" }
 import { SonarrLive } from "./config.js"
+import { methodNotAllowedRoutes, streamableHttpMiddleware } from "./streamable-http.js"
 import { SonarrToolkit, SonarrToolkitLive } from "./tools.js"
 
 // `name` is the unscoped MCP server identity (distinct from the npm scope);
@@ -35,63 +36,20 @@ export const StdioServerLive = ToolkitLive.pipe(
   Layer.provide(Logger.replace(Logger.defaultLogger, Logger.prettyLogger({ stderr: true }))),
 )
 
-// Shared across responses; `TextDecoder` is stateless for one-shot decode calls.
-const textDecoder = new TextDecoder()
-
 /**
- * `McpServer.layerHttp` runs MCP over `@effect/rpc`'s generic JSON-RPC protocol,
- * which frames every `application/json` POST response as a JSON-RPC *batch* — a
- * one-element array `[{ ... }]` even when the client sent a single request. MCP's
- * Streamable HTTP transport removed JSON-RPC batching in 2025-06-18 and requires
- * a single request to be answered with one JSON object:
+ * The Streamable HTTP MCP server: JSON-RPC over `POST /mcp`, bound to `host:port`.
+ * Each request is its own stateless RPC session. stdout no longer carries the
+ * protocol, so the default logger stays.
  *
- *   "If the input is a JSON-RPC request, the server MUST either return
- *    Content-Type: text/event-stream ... or Content-Type: application/json, to
- *    return one JSON object."
- *
- * Spec:     https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#sending-messages-to-the-server
- * Batching: https://modelcontextprotocol.io/specification/2025-06-18/changelog#major-changes ("Remove support for JSON-RPC batching")
- *
- * Strict clients decode the body as a single object and reject the array
- * outright. This unwraps a one-element response array back to the bare object;
- * multi-message responses (length > 1) pass through unchanged. Drop once the
- * upstream fix ships (Effect-TS/effect#6274, PR #6275).
- *
- * Implemented as a pre-response handler rather than an `Effect.map` middleware:
- * the latter runs *after* the response is already written to the socket, so its
- * result is discarded — a pre-response handler transforms the response first.
- */
-const unwrapSingleJsonRpcResponse = <E, R>(app: HttpApp.Default<E, R>): HttpApp.Default<E, R> =>
-  HttpApp.withPreResponseHandler(app, (_request, response) => {
-    const body = response.body
-    if (body._tag !== "Uint8Array" || !body.contentType.startsWith("application/json")) {
-      return Effect.succeed(response)
-    }
-    let payload: unknown
-    try {
-      payload = JSON.parse(textDecoder.decode(body.body))
-    } catch {
-      return Effect.succeed(response)
-    }
-    if (!Array.isArray(payload) || payload.length !== 1) {
-      return Effect.succeed(response)
-    }
-    return Effect.succeed(
-      HttpServerResponse.setBody(
-        response,
-        HttpBody.text(JSON.stringify(payload[0]), body.contentType),
-      ),
-    )
-  })
-
-/**
- * The Streamable HTTP MCP server: JSON-RPC over `POST /mcp`, bound to
- * `host:port`. Each request is its own stateless RPC session. stdout no longer
- * carries the protocol, so the default logger stays.
+ * `McpServer.layerHttp` runs MCP over `@effect/rpc`, whose JSON-RPC serializer
+ * diverges from the 2025-06-18 spec; `streamableHttpMiddleware` conforms the
+ * input/output and `methodNotAllowedRoutes` answers GET/DELETE with 405. See
+ * `./streamable-http.ts` for the specifics.
  */
 export const httpServerLive = (options: { readonly host: string; readonly port: number }) =>
-  Layer.mergeAll(ToolkitLive, HttpRouter.Default.serve(unwrapSingleJsonRpcResponse)).pipe(
+  Layer.mergeAll(ToolkitLive, HttpRouter.Default.serve(streamableHttpMiddleware)).pipe(
     Layer.provide(McpServer.layerHttp({ name, version, path: "/mcp" })),
+    Layer.provide(methodNotAllowedRoutes),
     // Logs "Listening on http://host:port" once the socket is actually bound.
     HttpServer.withLogAddress,
     Layer.provide(NodeHttpServer.layer(createServer, options)),
