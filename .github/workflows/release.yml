@@ -1,0 +1,79 @@
+name: Release
+
+# Changesets-driven release. On each push to main:
+#   - pending changesets  -> open/update a "Version Packages" PR (bumps versions, writes changelogs)
+#   - no changesets (that PR merged) -> tag the release, create GitHub Releases, then build the
+#     version-matched container image.
+# Uses only the built-in GITHUB_TOKEN; the versioned Docker build runs in this same run via the
+# reusable docker-publish workflow, so no PAT/App is needed.
+on:
+  push:
+    branches: [main]
+
+# Open/update the Version PR, push tags, and create Releases.
+permissions:
+  contents: write
+  pull-requests: write
+
+# Never cancel a release mid-flight.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Version or tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+      mcpVersion: ${{ steps.mcpver.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # changesets/action pushes the version branch + tags, so it needs persisted credentials.
+          fetch-depth: 0 # full history so changelog-github can resolve each changeset's commit/PR
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        # no version input — read from the "packageManager" field (pnpm@10.10.0)
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc # single source of truth (Node 24)
+          cache: pnpm # caches the pnpm store, keyed on pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create Version PR or tag release
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm version-packages # applies changesets -> the "Version Packages" PR
+          publish: pnpm release # `changeset tag` once that PR merges (git tags only — no npm yet)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve released sonarr-mcp version
+        id: mcpver
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
+        run: |
+          version="$(jq -r '.[] | select(.name == "@trugamr/sonarr-mcp") | .version' <<<"${PUBLISHED:-[]}")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  # Build the version-matched image only when this release included sonarr-mcp.
+  docker:
+    name: Publish versioned image
+    needs: release
+    if: needs.release.outputs.mcpVersion != ''
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      version: ${{ needs.release.outputs.mcpVersion }}

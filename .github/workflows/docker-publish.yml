@@ -1,11 +1,21 @@
 name: Publish Docker image
 
-# Publish a single moving `edge` image to GHCR on every merge to main; also
-# manually dispatchable. Versioned release tags are wired in a later slice.
+# Build and push the sonarr-mcp image to GHCR. Two modes:
+#   - push to main / manual dispatch  -> a moving `edge` tag (latest unreleased build)
+#   - called by release.yml with a `version` input -> `:X.Y.Z`, `:X.Y`, `:latest`
+# The release path passes the version explicitly, so no PAT is needed: the build runs
+# inside the release run using the built-in GITHUB_TOKEN.
 on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: Released sonarr-mcp version (e.g. 0.1.0). Empty for an edge build.
+        type: string
+        required: false
+        default: ""
 
 # GHCR push needs packages:write; checkout needs only read.
 permissions:
@@ -14,7 +24,7 @@ permissions:
 
 # Don't cancel an in-flight publish; let pushes finish.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version }}
   cancel-in-progress: false
 
 env:
@@ -48,9 +58,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # One moving `edge` tag tracking the latest main.
+          # No `version` input -> `edge` (latest main). With one -> the semver tags + `latest`.
           tags: |
-            type=raw,value=edge
+            type=raw,value=edge,enable=${{ inputs.version == '' }}
+            type=semver,pattern={{version}},value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=raw,value=latest,enable=${{ inputs.version != '' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
