@@ -13,7 +13,8 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsgo --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@effect/ai": "0.36.0",
@@ -26,5 +27,8 @@
     "@effect/rpc": "0.75.1",
     "@trugamr/sonarr": "workspace:*",
     "effect": "3.21.4"
+  },
+  "devDependencies": {
+    "@trugamr/testkit": "workspace:*"
   }
 }

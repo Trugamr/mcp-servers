@@ -1,7 +1,7 @@
+import { SONARR_VERSION } from "@trugamr/testkit/sonarr"
 import { beforeAll, describe, expect, it } from "vitest"
 import { SonarrResponseError } from "../../effect.js"
 import { failureOf, runExit, successOf } from "./helpers.js"
-import { SONARR_VERSION } from "./pinned.js"
 import { seedSeries, type SeededSeries, SPARE_ROOT_FOLDER } from "./seed.js"
 
 // Drives the SDK against a real Sonarr (booted by ./setup.ts) pinned to a fixed

@@ -1,0 +1,21 @@
+{
+  "name": "@trugamr/testkit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Internal test utilities shared across the SDK and MCP server suites: Testcontainers fixtures and an MCP JSON-RPC client. Consumed from source — not built or published.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./sonarr": "./src/sonarr/index.ts",
+    "./mcp": "./src/mcp/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "testcontainers": "12.0.3"
+  },
+  "devDependencies": {
+    "vitest": "4.1.9"
+  }
+}

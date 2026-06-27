@@ -1,13 +1,10 @@
+import { injectSonarr } from "@trugamr/testkit/sonarr"
 import { Cause, Effect, Exit, Option } from "effect"
-import { inject } from "vitest"
 import { Sonarr, type SonarrService } from "../../effect.js"
 
 // The live instance resolved by the global setup — either the booted container or
 // the one supplied via SONARR_BASE_URL / SONARR_API_KEY.
-const LiveSonarr = Sonarr.layer({
-  baseUrl: inject("sonarrBaseUrl"),
-  apiKey: inject("sonarrApiKey"),
-})
+const LiveSonarr = Sonarr.layer(injectSonarr())
 
 /**
  * Resolve a client operation against the live instance to an Exit, so each test
