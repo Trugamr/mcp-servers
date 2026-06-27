@@ -271,10 +271,10 @@ describe("list_series query surface", () => {
 })
 
 describe("list_episodes query surface", () => {
-  const mockEp = (data: ReadonlyArray<unknown>) =>
+  const mockEpisodes = (data: ReadonlyArray<unknown>) =>
     server.use(http.get(apiUrl("/episode"), () => HttpResponse.json(data)))
 
-  const eps = [
+  const episodes = [
     makeEpisode({
       id: 1,
       seasonNumber: 1,
@@ -304,7 +304,7 @@ describe("list_episodes query surface", () => {
     }),
   ]
 
-  beforeEach(() => mockEp(eps))
+  beforeEach(() => mockEpisodes(episodes))
 
   it("filters by missing and hasAired conveniences", async () => {
     expect(
@@ -331,7 +331,7 @@ describe("list_episodes query surface", () => {
   })
 
   it("filters by airDate range, sorts by airDate desc, and keeps overview", async () => {
-    mockEp(eps.map((e, i) => ({ ...e, overview: `ov${i}` })))
+    mockEpisodes(episodes.map((e, i) => ({ ...e, overview: `ov${i}` })))
 
     const win = await Effect.runPromise(
       run((s) =>
