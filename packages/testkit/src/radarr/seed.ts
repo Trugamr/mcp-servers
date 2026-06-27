@@ -5,10 +5,11 @@ import { injectRadarr } from "./integration.js"
 // `tmpfs` option) so Radarr accepts it as a root folder without a real disk.
 export const MOVIE_ROOT_FOLDER = "/movies"
 
-// The Shawshank Redemption (1994) — a released film, so its identity (tmdbId, year,
-// status) is stable to assert against.
-const MOVIE_TMDB_ID = 278
-const MOVIE_TITLE = "The Shawshank Redemption"
+// Lemony Snicket's A Series of Unfortunate Events (2004) — a released film, so its
+// identity (tmdbId, year, status) is stable to assert against. Mirrors the show the
+// Sonarr seed uses.
+const MOVIE_TMDB_ID = 11774
+const MOVIE_TITLE = "Lemony Snicket's A Series of Unfortunate Events"
 
 export interface SeededMovie {
   readonly id: number

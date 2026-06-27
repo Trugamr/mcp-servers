@@ -35,7 +35,7 @@ describe("Radarr SDK against a pinned Radarr instance", () => {
       expect(match).toMatchObject({
         title: seeded.title,
         tmdbId: seeded.tmdbId,
-        year: 1994,
+        year: 2004,
         status: "released",
       })
     })
