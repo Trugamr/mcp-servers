@@ -1,18 +1,38 @@
 name: Publish Docker image
 
-# Build and push the sonarr-mcp image to GHCR. Invoked only by release.yml (and manual
-# dispatch) — there is no `push:` trigger, so a release merge builds the image once, not twice:
+# Build and push one MCP server image to GHCR. Invoked only by release.yml (and manual
+# dispatch) — there is no `push:` trigger, so a release merge builds each image once, not
+# twice:
 #   - no `version` input -> a moving `edge` tag (latest unreleased build)
 #   - a `version` input  -> `:X.Y.Z`, `:X.Y`, `:latest`
-# release.yml calls this on every push to main: with the released version when a release just
-# happened, otherwise with an empty version for an edge build. No PAT is needed — it all runs
-# inside the release run on the built-in GITHUB_TOKEN.
+# The `package` input is the short name (e.g. `radarr-mcp`); the image name and Dockerfile
+# path are derived from it, so a caller can't pair the wrong two. release.yml calls this per
+# MCP on every push to main: with the released version when that MCP was just released,
+# otherwise with an empty version for an edge build. No PAT is needed — it all runs inside the
+# release run on the built-in GITHUB_TOKEN.
 on:
   workflow_dispatch:
+    inputs:
+      package:
+        description: MCP server to build.
+        type: choice
+        options:
+          - sonarr-mcp
+          - radarr-mcp
+        default: sonarr-mcp
+      version:
+        description: Released version (e.g. 0.1.0). Empty for an edge build.
+        type: string
+        required: false
+        default: ""
   workflow_call:
     inputs:
+      package:
+        description: MCP server short name (e.g. radarr-mcp) — names the image and Dockerfile.
+        type: string
+        required: true
       version:
-        description: Released sonarr-mcp version (e.g. 0.1.0). Empty for an edge build.
+        description: Released version (e.g. 0.1.0). Empty for an edge build.
         type: string
         required: false
         default: ""
@@ -23,19 +43,20 @@ permissions:
   packages: write
 
 # Don't cancel an in-flight publish; let it finish. (release.yml serializes its own runs per
-# ref, so the calls into here are already ordered.)
+# ref, so the calls into here are already ordered.) Keyed on the package too, so the two MCP
+# builds in one release run don't serialize against each other.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.package }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
-  # GHCR namespace is the repo owner, lowercased: ghcr.io/trugamr/sonarr-mcp.
-  IMAGE_NAME: trugamr/sonarr-mcp
+  # GHCR namespace is the repo owner, lowercased: ghcr.io/trugamr/<package>.
+  IMAGE_NAME: trugamr/${{ inputs.package }}
 
 jobs:
   publish:
-    name: Build and push sonarr-mcp
+    name: Build and push ${{ inputs.package }}
     runs-on: ubuntu-latest
     timeout-minutes: 30 # first build installs + builds the workspace
     steps:
@@ -70,7 +91,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: . # repo root — the build needs the workspace + lockfile
-          file: packages/sonarr-mcp/Dockerfile
+          file: packages/${{ inputs.package }}/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

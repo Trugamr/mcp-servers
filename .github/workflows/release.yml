@@ -2,10 +2,11 @@ name: Release
 
 # Changesets-driven release, and the single owner of image publishing. On each push to main:
 #   - pending changesets -> open/update a "Version Packages" PR (bumps versions, writes changelogs)
-#   - that PR merged      -> publish to npm, tag the release, create GitHub Releases, build the image
-#   - any other push      -> (re)build the moving `edge` image
-# The image build runs in this same run via the reusable docker-publish workflow on the built-in
-# GITHUB_TOKEN, so no PAT/App is needed — and a release merge builds the image once, not twice.
+#   - that PR merged      -> publish to npm, tag the release, create GitHub Releases, build the images
+#   - any other push      -> (re)build the moving `edge` images
+# Each MCP image is built in this same run via the reusable docker-publish workflow (one matrix
+# entry per server) on the built-in GITHUB_TOKEN, so no PAT/App is needed — and a release merge
+# builds each image once, not twice.
 on:
   push:
     branches: [main]
@@ -26,8 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
-      published: ${{ steps.changesets.outputs.published }}
-      mcpVersion: ${{ steps.mcpver.outputs.version }}
+      # One image-build entry per MCP server: { package, version }. An empty version means that
+      # MCP wasn't part of this release, so it gets a moving `edge` build instead of semver tags.
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -62,24 +64,37 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # npm publish auth (granular automation token)
 
-      - name: Resolve released sonarr-mcp version
-        id: mcpver
-        if: steps.changesets.outputs.published == 'true'
+      - name: Build the image matrix (one entry per MCP server)
+        id: matrix
         env:
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
         run: |
-          version="$(jq -r '.[] | select(.name == "@trugamr/sonarr-mcp") | .version' <<<"$PUBLISHED")"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # publishedPackages is empty on a non-release push; treat that as "nothing published"
+          # so each MCP falls back to an edge build. A released MCP picks up its own version, so
+          # the two images version independently.
+          published="${PUBLISHED:-[]}"
+          version_of() { jq -r --arg name "$1" '.[]? | select(.name == $name) | .version' <<<"$published"; }
+          matrix="$(jq -cn \
+            --arg sonarr "$(version_of "@trugamr/sonarr-mcp")" \
+            --arg radarr "$(version_of "@trugamr/radarr-mcp")" \
+            '{include: [
+              {package: "sonarr-mcp", version: $sonarr},
+              {package: "radarr-mcp", version: $radarr}
+            ]}')"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
-  # Publish the image on every push: the released version when sonarr-mcp was just released,
-  # otherwise an empty version for a moving `edge` build. A second containerized package would
-  # fan out here — extract its version above and matrix the build — rather than copy this job.
+  # Publish each MCP image on every push: the released version when that MCP was just released,
+  # otherwise an empty version for a moving `edge` build. The matrix fans out one reusable-workflow
+  # call per MCP — adding a third containerized package is a new entry in the matrix step above.
   docker:
     name: Publish image
     needs: release
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix: ${{ fromJSON(needs.release.outputs.matrix) }}
     uses: ./.github/workflows/docker-publish.yml
     with:
-      version: ${{ needs.release.outputs.mcpVersion }}
+      package: ${{ matrix.package }}
+      version: ${{ matrix.version }}
