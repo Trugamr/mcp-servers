@@ -4,9 +4,9 @@ Releases are automated with [Changesets](https://github.com/changesets/changeset
 
 ## What gets released
 
-- `@trugamr/sonarr`, `@trugamr/radarr`, and `@trugamr/sonarr-mcp` are versioned independently from a `0.0.0` baseline and published to npm.
+- `@trugamr/sonarr`, `@trugamr/radarr`, `@trugamr/sonarr-mcp`, and `@trugamr/radarr-mcp` are versioned independently from a `0.0.0` baseline and published to npm.
 - `@trugamr/kit` and `@trugamr/testkit` are private and source-only: `kit` is inlined into the SDKs at build time, `testkit` is test-only, so neither is versioned, tagged, or published — enforced by `private: true` plus `privatePackages` in [`.changeset/config.json`](../.changeset/config.json).
-- Every `@trugamr/sonarr-mcp` release also publishes a version-matched container image to GHCR.
+- Each MCP server release also publishes a version-matched container image to GHCR (`ghcr.io/trugamr/sonarr-mcp`, `ghcr.io/trugamr/radarr-mcp`).
 
 ## Adding a changeset
 
@@ -21,13 +21,13 @@ Pick the affected packages, choose `patch` / `minor` / `major`, and write a one-
 ## The release flow
 
 1. **Merge a PR carrying changesets to `main`.** `release.yml` opens (or updates) a **"Version Packages"** PR that applies every pending changeset: it bumps versions, writes each package's `CHANGELOG.md`, and deletes the consumed changeset files.
-2. **Merge the "Version Packages" PR when you're ready to ship.** That merge builds the packages, publishes them to npm, tags the release (`@trugamr/sonarr@x.y.z`, `@trugamr/radarr@x.y.z`, `@trugamr/sonarr-mcp@x.y.z`), creates GitHub Releases from the changelog, and — in the same workflow run — builds and pushes the matching image.
+2. **Merge the "Version Packages" PR when you're ready to ship.** That merge builds the packages, publishes them to npm, tags the release (`@trugamr/sonarr@x.y.z`, `@trugamr/radarr@x.y.z`, `@trugamr/sonarr-mcp@x.y.z`, `@trugamr/radarr-mcp@x.y.z`), creates GitHub Releases from the changelog, and — in the same workflow run — builds and pushes each MCP server's image.
 
 Sit on the Version Packages PR to batch several merges into one release; merge it to ship.
 
 ## Container image tags
 
-`docker-publish.yml` publishes `ghcr.io/trugamr/sonarr-mcp`:
+`docker-publish.yml` builds one MCP server image (`ghcr.io/trugamr/sonarr-mcp` or `ghcr.io/trugamr/radarr-mcp`); `release.yml` calls it once per server via a matrix, so each image versions independently with the same tag scheme:
 
 | Tag       | When                 | Tracks                     |
 | --------- | -------------------- | -------------------------- |
@@ -36,7 +36,7 @@ Sit on the Version Packages PR to batch several merges into one release; merge i
 | `:x.y`    | a release            | latest patch of that minor |
 | `:latest` | a release            | newest release             |
 
-The versioned build runs inside the release run (via a reusable `workflow_call`), so it needs no personal access token — only the built-in `GITHUB_TOKEN`.
+Each build runs inside the release run (via a reusable `workflow_call`), so it needs no personal access token — only the built-in `GITHUB_TOKEN`. Adding a third containerized server is a new entry in the `matrix` step of `release.yml`.
 
 ## npm publishing
 
