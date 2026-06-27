@@ -1,8 +1,10 @@
 name: Publish Docker image
 
-# Manual-only for now: prove the GHCR login/build/push path before wiring it to
-# release tags (that trigger is added in a later slice).
+# Publish a single moving `edge` image to GHCR on every merge to main; also
+# manually dispatchable. Versioned release tags are wired in a later slice.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 # GHCR push needs packages:write; checkout needs only read.
@@ -46,9 +48,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Manual builds: immutable per-commit tag + a moving "edge" pointer.
+          # One moving `edge` tag tracking the latest main.
           tags: |
-            type=sha
             type=raw,value=edge
 
       - name: Build and push
