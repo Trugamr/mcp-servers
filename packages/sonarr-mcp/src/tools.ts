@@ -136,16 +136,18 @@ const CursorPage = <A, I>(item: Schema.Schema<A, I>) =>
     totalRecords: Schema.Number,
   })
 
-// The opaque cursor is just the next offset, base64url-encoded. Clients must treat
-// it as opaque; the offset is meaningful only against the same filter+sort, and a
-// default sort keeps it stable across calls.
-const CursorOffset = Schema.compose(Schema.NumberFromString, Schema.NonNegativeInt)
-const encodeCursor = (offset: number) => Encoding.encodeBase64Url(String(offset))
+// The opaque cursor is a base64url-encoded `{ offset }` JSON object. Clients must
+// treat it as opaque; the offset is meaningful only against the same filter+sort,
+// and a default sort keeps it stable across calls.
+const Cursor = Schema.parseJson(Schema.Struct({ offset: Schema.NonNegativeInt }))
+const encodeCursor = (offset: number) =>
+  Encoding.encodeBase64Url(Schema.encodeSync(Cursor)({ offset }))
 /** Decode a cursor to its offset; an invalid cursor fails as a tool error. */
 const decodeCursor = (cursor?: string): Effect.Effect<number, { _tag: string; message: string }> =>
   isDefined(cursor)
     ? Encoding.decodeBase64UrlString(cursor).pipe(
-        Effect.flatMap(Schema.decode(CursorOffset)),
+        Effect.flatMap(Schema.decode(Cursor)),
+        Effect.map((decoded) => decoded.offset),
         Effect.mapError(() => ({
           _tag: "InvalidCursor",
           message: `Invalid pagination cursor: ${cursor}`,
