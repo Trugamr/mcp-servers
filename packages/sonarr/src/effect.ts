@@ -8,7 +8,7 @@
 export { Sonarr } from "./internal/client.js"
 export type { SonarrService, SonarrV3Api } from "./internal/client.js"
 export type { SonarrConfigInput } from "./internal/config.js"
-export type { EpisodeListParams } from "./internal/episode.js"
+export type { EpisodeListParameters } from "./internal/episode.js"
 export { DiskSpace } from "./internal/schemas/disk-space.js"
 export { Episode } from "./internal/schemas/episode.js"
 export { Health } from "./internal/schemas/health.js"

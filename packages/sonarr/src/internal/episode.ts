@@ -10,7 +10,7 @@ const basePath = `${apiBase}/episode`
 // build the array schema once here rather than on every call.
 const EpisodeArray = Schema.Array(Episode)
 
-export interface EpisodeListParams {
+export interface EpisodeListParameters {
   readonly seriesId: number
   readonly seasonNumber?: number | undefined
 }
@@ -20,9 +20,9 @@ export interface EpisodeListParams {
  * optionally narrowed to one season. `seriesId` is required by Sonarr; an
  * omitted `seasonNumber` is dropped from the query string.
  */
-export const list = (config: SonarrConfig, params: EpisodeListParams) =>
+export const list = (config: SonarrConfig, parameters: EpisodeListParameters) =>
   provideTransport(
     getJson(config, EpisodeArray, basePath, {
-      urlParams: { seriesId: params.seriesId, seasonNumber: params.seasonNumber },
+      urlParams: { seriesId: parameters.seriesId, seasonNumber: parameters.seasonNumber },
     }),
   )

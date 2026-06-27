@@ -33,7 +33,7 @@ afterAll(() => Effect.runPromise(Scope.close(scope, Exit.void)))
 // POST one JSON-RPC request and return its single result payload, unwrapping the
 // batch array the RPC server replies with. Callers decode it through the matching
 // `McpSchema` schema, so a malformed response fails the test.
-const resultOf = (method: string, params: unknown): Promise<unknown> =>
+const resultOf = (method: string, parameters: unknown): Promise<unknown> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const response = yield* Effect.promise(() =>
@@ -43,7 +43,7 @@ const resultOf = (method: string, params: unknown): Promise<unknown> =>
             "Content-Type": "application/json",
             Accept: "application/json, text/event-stream",
           },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: parameters }),
         }),
       )
       const batch = (yield* Effect.promise(() => response.json())) as ReadonlyArray<{

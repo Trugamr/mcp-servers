@@ -35,7 +35,7 @@ const run = <A, E>(build: (sonarr: SonarrService) => Effect.Effect<A, E>) =>
 
 const makeSeries = (overrides: Partial<Series> = {}) => ({ ...seriesFixture, ...overrides })
 const makeEpisode = (overrides: Partial<Episode> = {}) => ({ ...episodeFixture, ...overrides })
-const ids = (r: { items: ReadonlyArray<{ id: number }> }) => r.items.map((i) => i.id).sort()
+const ids = (r: { items: ReadonlyArray<{ id: number }> }) => r.items.map((item) => item.id).sort()
 
 describe("get_system_status tool handler", () => {
   it("returns the decoded status on success", async () => {
@@ -178,8 +178,8 @@ describe("list_series query surface", () => {
 
   it("caps the default page and returns a cursor for the next", async () => {
     mockSeries(
-      Array.from({ length: 25 }, (_, i) =>
-        makeSeries({ id: i + 1, title: `S${String(i).padStart(2, "0")}` }),
+      Array.from({ length: 25 }, (_, index) =>
+        makeSeries({ id: index + 1, title: `S${String(index).padStart(2, "0")}` }),
       ),
     )
 
@@ -196,7 +196,9 @@ describe("list_series query surface", () => {
   })
 
   it("honors the page size hint", async () => {
-    mockSeries(Array.from({ length: 5 }, (_, i) => makeSeries({ id: i + 1, title: `S${i}` })))
+    mockSeries(
+      Array.from({ length: 5 }, (_, index) => makeSeries({ id: index + 1, title: `S${index}` })),
+    )
 
     const r = await Effect.runPromise(run((s) => listSeries(s, { page: { size: 2 } })))
 
@@ -247,19 +249,19 @@ describe("list_series query surface", () => {
     const byYearDesc = await Effect.runPromise(
       run((s) => listSeries(s, { sort: [{ field: "year", order: "desc" }, { field: "title" }] })),
     )
-    expect(byYearDesc.items.map((i) => i.id)).toEqual([2, 3, 1])
+    expect(byYearDesc.items.map((item) => item.id)).toEqual([2, 3, 1])
 
-    const def = await Effect.runPromise(run((s) => listSeries(s)))
-    expect(def.items.map((i) => i.title)).toEqual(["Alpha", "Bravo", "Charlie"])
+    const defaultResult = await Effect.runPromise(run((s) => listSeries(s)))
+    expect(defaultResult.items.map((item) => item.title)).toEqual(["Alpha", "Bravo", "Charlie"])
   })
 
   it("projects lean summaries: keeps statistics/ratings, drops seasons", async () => {
-    const def = await Effect.runPromise(run((s) => listSeries(s)))
+    const defaultResult = await Effect.runPromise(run((s) => listSeries(s)))
     // Default title-ascending order: [Alpha, Bravo, Charlie]; only Charlie has stats.
-    const [alpha, , charlie] = def.items
+    const [alpha, , charlie] = defaultResult.items
 
     // The unbounded seasons[] block and overview are always dropped.
-    for (const item of def.items) {
+    for (const item of defaultResult.items) {
       expect(item).not.toHaveProperty("seasons")
       expect(item).not.toHaveProperty("overview")
     }
@@ -356,7 +358,7 @@ describe("list_episodes query surface", () => {
   })
 
   it("filters by airDate range, sorts by airDate desc, and keeps overview", async () => {
-    mockEpisodes(episodes.map((e, i) => ({ ...e, overview: `ov${i}` })))
+    mockEpisodes(episodes.map((episode, index) => ({ ...episode, overview: `ov${index}` })))
 
     const win = await Effect.runPromise(
       run((s) =>
@@ -368,7 +370,7 @@ describe("list_episodes query surface", () => {
         }),
       ),
     )
-    expect(win.items.map((i) => i.id)).toEqual([2])
+    expect(win.items.map((item) => item.id)).toEqual([2])
 
     const sorted = await Effect.runPromise(
       run((s) =>
@@ -378,7 +380,7 @@ describe("list_episodes query surface", () => {
         }),
       ),
     )
-    expect(sorted.items.map((i) => i.id)).toEqual([3, 2, 1])
+    expect(sorted.items.map((item) => item.id)).toEqual([3, 2, 1])
     expect(sorted.items[0]).toHaveProperty("overview")
   })
 })
