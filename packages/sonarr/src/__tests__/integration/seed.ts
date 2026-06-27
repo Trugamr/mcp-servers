@@ -35,9 +35,9 @@ export interface SeededSeries {
 /**
  * Seed one real series so the series/episode reads decode populated payloads
  * instead of empty arrays. The SDK is read-only for series, so this uses Sonarr's
- * API directly: register a root folder, add the series (Sonarr pulls metadata and
- * episodes from its online provider), then wait for the async refresh to populate
- * episodes. Requires network access to Sonarr's metadata service.
+ * API directly: register a root folder, add the series, then run a RefreshSeries
+ * command and wait for it to complete — that is what fetches the episodes from
+ * Sonarr's online metadata provider. Requires network access to that provider.
  */
 export const seedSeries = async (): Promise<SeededSeries> => {
   const folders = (await (await sonarr("/api/v3/rootfolder")).json()) as Array<{ path?: string }>
@@ -62,16 +62,37 @@ export const seedSeries = async (): Promise<SeededSeries> => {
     })
   ).json()) as { id: number }
 
-  // Adding the series kicks off an async refresh that fetches its episodes; poll
-  // until they land.
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const episodes = (await (
-      await sonarr(`/api/v3/episode?seriesId=${added.id}`)
-    ).json()) as Array<unknown>
-    if (episodes.length > 0) {
-      return { id: added.id, tvdbId: SERIES_TVDB_ID, title: SERIES_TITLE }
+  const refresh = (await (
+    await sonarr("/api/v3/command", {
+      method: "POST",
+      body: JSON.stringify({ name: "RefreshSeries", seriesId: added.id }),
+    })
+  ).json()) as SonarrCommand
+  await waitForCommand(refresh.id)
+
+  return { id: added.id, tvdbId: SERIES_TVDB_ID, title: SERIES_TITLE }
+}
+
+interface SonarrCommand {
+  readonly id: number
+  readonly status: string // queued | started | completed | failed | aborted
+}
+
+/**
+ * Poll a Sonarr command until it reaches a terminal state. Waiting on the command
+ * (rather than for episodes to appear) means the seed is done exactly when Sonarr
+ * says the refresh finished, and a failed refresh surfaces immediately.
+ */
+const waitForCommand = async (commandId: number): Promise<void> => {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const command = (await (await sonarr(`/api/v3/command/${commandId}`)).json()) as SonarrCommand
+    if (command.status === "completed") {
+      return
     }
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    if (command.status === "failed" || command.status === "aborted") {
+      throw new Error(`Sonarr RefreshSeries command ${commandId} ${command.status}`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000))
   }
-  throw new Error("Sonarr did not populate episodes for the seeded series in time")
+  throw new Error(`Sonarr RefreshSeries command ${commandId} did not complete in time`)
 }
