@@ -1,5 +1,5 @@
 import { McpServer } from "@effect/ai"
-import { HttpRouter } from "@effect/platform"
+import { HttpRouter, HttpServer } from "@effect/platform"
 import { NodeHttpServer, NodeSink, NodeStream } from "@effect/platform-node"
 import { Layer, Logger } from "effect"
 import { createServer } from "node:http"
@@ -43,5 +43,7 @@ export const StdioServerLive = ToolkitLive.pipe(
 export const httpServerLive = (options: { readonly host: string; readonly port: number }) =>
   Layer.mergeAll(ToolkitLive, HttpRouter.Default.serve()).pipe(
     Layer.provide(McpServer.layerHttp({ name, version, path: "/mcp" })),
+    // Logs "Listening on http://host:port" once the socket is actually bound.
+    HttpServer.withLogAddress,
     Layer.provide(NodeHttpServer.layer(createServer, options)),
   )

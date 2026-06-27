@@ -1,0 +1,22 @@
+# Keep the build context small; Turbo prune + pnpm install regenerate these.
+node_modules
+**/node_modules
+dist
+**/dist
+.turbo
+**/.turbo
+coverage
+**/coverage
+*.tsbuildinfo
+*.log
+.git
+.github
+.DS_Store
+Dockerfile
+.dockerignore
+
+# Never copy local env secrets into the build context or image layers.
+.env
+.env.*
+**/.env
+**/.env.*
