@@ -43,15 +43,9 @@ const readonlyHints = hints({ readonly: true, destructive: false })
 const writeHints = hints({ readonly: false, destructive: false })
 const destructiveHints = hints({ readonly: false, destructive: true })
 
-// ---------------------------------------------------------------------------
-// Query surface for the list tools — filter / sort / paginate, applied
-// client-side because Sonarr's `/series` and `/episode` endpoints return a flat
-// array with no server-side query support. The shapes below model a structured,
-// MCP-native query (typed JSON, no URL-style brackets) with explicit per-field
-// operators, so the generated `inputSchema` stays nested objects + enums (no
-// `anyOf` unions).
-// ---------------------------------------------------------------------------
-
+// Structured query surface for the list tools: filter / sort / paginate, applied
+// client-side because Sonarr's `/series` and `/episode` return flat arrays with no
+// query support. Explicit per-field operators keep the inputSchema free of `anyOf`.
 const DEFAULT_PAGE_SIZE = 20
 const MAX_PAGE_SIZE = 100
 const SortOrder = Schema.Literal("asc", "desc")
@@ -93,35 +87,36 @@ type OrdOp<A> = Schema.Schema.Type<ReturnType<typeof Ord<A, A>>>
 type TextOp = Schema.Schema.Type<typeof Text>
 type BoolOp = Schema.Schema.Type<typeof Bool>
 
+const isDefined = <T>(value: T): value is Exclude<T, undefined> => value !== undefined
+
 // Each matcher returns true when the value satisfies every present operator (an
-// absent operator is a no-op). Written as boolean expressions so a missing filter
-// or operator simply short-circuits to `true`.
+// absent operator is a no-op), so a missing filter short-circuits to `true`.
 const matchEq = <T>(v: T, f?: EqOp<T>) =>
   !f ||
-  ((f.eq === undefined || v === f.eq) &&
-    (f.ne === undefined || v !== f.ne) &&
-    (f.in === undefined || f.in.includes(v)) &&
-    (f.nin === undefined || !f.nin.includes(v)))
+  ((!isDefined(f.eq) || v === f.eq) &&
+    (!isDefined(f.ne) || v !== f.ne) &&
+    (!isDefined(f.in) || f.in.includes(v)) &&
+    (!isDefined(f.nin) || !f.nin.includes(v)))
 // A null/absent value fails any present ordered constraint.
 const matchOrd = <T extends string | number>(v: T | null | undefined, f?: OrdOp<T>) =>
   !f ||
   (v != null &&
     matchEq(v, f) &&
-    (f.gte === undefined || v >= f.gte) &&
-    (f.lte === undefined || v <= f.lte) &&
-    (f.gt === undefined || v > f.gt) &&
-    (f.lt === undefined || v < f.lt))
+    (!isDefined(f.gte) || v >= f.gte) &&
+    (!isDefined(f.lte) || v <= f.lte) &&
+    (!isDefined(f.gt) || v > f.gt) &&
+    (!isDefined(f.lt) || v < f.lt))
 const matchText = (v: string | null | undefined, f?: TextOp) => {
   const s = v ?? ""
   return (
     !f ||
-    ((f.eq === undefined || s === f.eq) &&
-      (f.ne === undefined || s !== f.ne) &&
-      (f.contains === undefined || s.toLowerCase().includes(f.contains.toLowerCase())) &&
-      (f.in === undefined || f.in.includes(s)))
+    ((!isDefined(f.eq) || s === f.eq) &&
+      (!isDefined(f.ne) || s !== f.ne) &&
+      (!isDefined(f.contains) || s.toLowerCase().includes(f.contains.toLowerCase())) &&
+      (!isDefined(f.in) || f.in.includes(s)))
   )
 }
-const matchBool = (v: boolean, f?: BoolOp) => !f || f.eq === undefined || v === f.eq
+const matchBool = (v: boolean, f?: BoolOp) => !f || !isDefined(f.eq) || v === f.eq
 
 const clamp = (n: number, lo: number, hi: number) =>
   Math.min(Math.max(Math.trunc(Number.isFinite(n) ? n : lo), lo), hi)
@@ -149,7 +144,7 @@ const encodeCursor = (offset: number) => Encoding.encodeBase64Url(JSON.stringify
 const decodeCursor = (
   cursor?: string,
 ): Effect.Effect<number, { _tag: string; message: string }> => {
-  if (cursor === undefined) {
+  if (!isDefined(cursor)) {
     return Effect.succeed(0)
   }
   return Effect.try({
@@ -183,11 +178,9 @@ const pageByCursor = <A, B>(
   return {
     items: slice.map(project),
     totalRecords,
-    ...(next < totalRecords ? { nextCursor: encodeCursor(next) } : {}),
+    ...(next < totalRecords && { nextCursor: encodeCursor(next) }),
   }
 }
-
-// --- Series query ----------------------------------------------------------
 
 // Lean list projection. The heavy `seasons[]`/`statistics`/`ratings` blocks are
 // dropped; full detail is available through `get_series`. Derived from the SDK
@@ -215,8 +208,8 @@ const toSeriesSummary = (s: Series): SeriesSummary => ({
   tvdbId: s.tvdbId,
   qualityProfileId: s.qualityProfileId,
   seriesType: s.seriesType,
-  ...(s.network !== undefined ? { network: s.network } : {}),
-  ...(s.path !== undefined ? { path: s.path } : {}),
+  ...(isDefined(s.network) && { network: s.network }),
+  ...(isDefined(s.path) && { path: s.path }),
 })
 
 const seriesOrders: Record<"title" | "year" | "added", Order.Order<Series>> = {
@@ -271,8 +264,6 @@ const seriesOrder = (sort: SeriesSortValue = []) =>
     ),
   )
 
-// --- Episode query ---------------------------------------------------------
-
 // The SDK `Episode` carries no heavy nested blocks, so the episode list needs no
 // `include` — the summary keeps `overview` (no get_episode tool to recover it).
 const EpisodeSummary = Episode.pick(
@@ -295,9 +286,9 @@ const toEpisodeSummary = (e: Episode): EpisodeSummary => ({
   episodeNumber: e.episodeNumber,
   hasFile: e.hasFile,
   monitored: e.monitored,
-  ...(e.title !== undefined ? { title: e.title } : {}),
-  ...(e.airDate !== undefined ? { airDate: e.airDate } : {}),
-  ...(e.overview !== undefined ? { overview: e.overview } : {}),
+  ...(isDefined(e.title) && { title: e.title }),
+  ...(isDefined(e.airDate) && { airDate: e.airDate }),
+  ...(isDefined(e.overview) && { overview: e.overview }),
 })
 
 const EpisodeFilter = Schema.Struct({
@@ -330,9 +321,9 @@ const matchesEpisode = (e: Episode, f: EpisodeFilterValue = {}) =>
   matchText(e.title, f.title) &&
   matchBool(e.monitored, f.monitored) &&
   matchBool(e.hasFile, f.hasFile) &&
-  (f.missing === undefined || f.missing === (e.monitored && !e.hasFile)) &&
+  (!isDefined(f.missing) || f.missing === (e.monitored && !e.hasFile)) &&
   matchOrd(e.airDateUtc, f.airDate) &&
-  (f.hasAired === undefined || f.hasAired === episodeAired(e))
+  (!isDefined(f.hasAired) || f.hasAired === episodeAired(e))
 
 const byEpisodeNumber: Order.Order<Episode> = Order.combine(
   Order.mapInput(Order.number, (e: Episode) => e.seasonNumber),
@@ -366,8 +357,6 @@ const episodeOrder = (sort: EpisodeSortValue = []) =>
       episodeFieldOrder(s.field, s.order ?? "asc"),
     ),
   )
-
-// ---------------------------------------------------------------------------
 
 const GetSystemStatus = Tool.make("get_system_status", {
   description:

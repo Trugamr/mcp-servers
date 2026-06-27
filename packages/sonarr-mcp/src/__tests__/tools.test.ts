@@ -1,8 +1,8 @@
-import { Sonarr, type SonarrService } from "@trugamr/sonarr/effect"
+import { type Episode, type Series, Sonarr, type SonarrService } from "@trugamr/sonarr/effect"
 import { Cause, Effect, Exit, JSONSchema, Option, Schema, SchemaAST } from "effect"
 import { http, HttpResponse } from "msw"
 import { setupServer } from "msw/node"
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import {
   createTag,
   getSeries,
@@ -33,8 +33,8 @@ afterAll(() => server.close())
 const run = <A, E>(build: (sonarr: SonarrService) => Effect.Effect<A, E>) =>
   Effect.flatMap(Sonarr, build).pipe(Effect.provide(TestSonarr))
 
-const mkSeries = (o: Record<string, unknown>) => ({ ...seriesFixture, ...o })
-const mkEp = (o: Record<string, unknown>) => ({ ...episodeFixture, ...o })
+const makeSeries = (overrides: Partial<Series> = {}) => ({ ...seriesFixture, ...overrides })
+const makeEpisode = (overrides: Partial<Episode> = {}) => ({ ...episodeFixture, ...overrides })
 const ids = (r: { items: ReadonlyArray<{ id: number }> }) => r.items.map((i) => i.id).sort()
 
 describe("get_system_status tool handler", () => {
@@ -122,7 +122,7 @@ describe("list_series query surface", () => {
 
   // Three series exercising every filterable field; statistics/ratings only on #3.
   const library = [
-    mkSeries({
+    makeSeries({
       id: 1,
       title: "Alpha",
       year: 2010,
@@ -134,7 +134,7 @@ describe("list_series query surface", () => {
       genres: ["Drama", "Crime"],
       network: "HBO",
     }),
-    mkSeries({
+    makeSeries({
       id: 2,
       title: "Bravo",
       year: 2016,
@@ -146,7 +146,7 @@ describe("list_series query surface", () => {
       genres: ["Comedy"],
       network: "Netflix",
     }),
-    mkSeries({
+    makeSeries({
       id: 3,
       title: "Charlie",
       year: 2015,
@@ -169,10 +169,13 @@ describe("list_series query surface", () => {
     }),
   ]
 
+  // Most cases query this library; the paging cases override with their own data.
+  beforeEach(() => mockSeries(library))
+
   it("caps the default page and returns a cursor for the next", async () => {
     mockSeries(
       Array.from({ length: 25 }, (_, i) =>
-        mkSeries({ id: i + 1, title: `S${String(i).padStart(2, "0")}` }),
+        makeSeries({ id: i + 1, title: `S${String(i).padStart(2, "0")}` }),
       ),
     )
 
@@ -189,7 +192,7 @@ describe("list_series query surface", () => {
   })
 
   it("honors the page size hint", async () => {
-    mockSeries(Array.from({ length: 5 }, (_, i) => mkSeries({ id: i + 1, title: `S${i}` })))
+    mockSeries(Array.from({ length: 5 }, (_, i) => makeSeries({ id: i + 1, title: `S${i}` })))
 
     const r = await Effect.runPromise(run((s) => listSeries(s, { page: { size: 2 } })))
 
@@ -208,8 +211,6 @@ describe("list_series query surface", () => {
   })
 
   it("filters by status, monitored, year range, and type negation", async () => {
-    mockSeries(library)
-
     expect(
       ids(
         await Effect.runPromise(
@@ -239,8 +240,6 @@ describe("list_series query surface", () => {
   })
 
   it("sorts by multiple fields and defaults to title ascending", async () => {
-    mockSeries(library)
-
     const byYearDesc = await Effect.runPromise(
       run((s) => listSeries(s, { sort: [{ field: "year", order: "desc" }, { field: "title" }] })),
     )
@@ -251,8 +250,6 @@ describe("list_series query surface", () => {
   })
 
   it("projects lean summaries, dropping the heavy blocks", async () => {
-    mockSeries(library)
-
     const def = await Effect.runPromise(run((s) => listSeries(s)))
     const first = def.items[0]
     expect(first?.title).toBeDefined()
@@ -263,8 +260,6 @@ describe("list_series query surface", () => {
   })
 
   it("returns an empty page when nothing matches", async () => {
-    mockSeries(library)
-
     const none = await Effect.runPromise(
       run((s) => listSeries(s, { filter: { title: { contains: "zzzzz" } } })),
     )
@@ -280,7 +275,7 @@ describe("list_episodes query surface", () => {
     server.use(http.get(apiUrl("/episode"), () => HttpResponse.json(data)))
 
   const eps = [
-    mkEp({
+    makeEpisode({
       id: 1,
       seasonNumber: 1,
       episodeNumber: 1,
@@ -289,7 +284,7 @@ describe("list_episodes query surface", () => {
       monitored: true,
       airDateUtc: "2010-01-01T00:00:00Z",
     }),
-    mkEp({
+    makeEpisode({
       id: 2,
       seasonNumber: 1,
       episodeNumber: 2,
@@ -298,7 +293,7 @@ describe("list_episodes query surface", () => {
       monitored: true,
       airDateUtc: "2010-01-08T00:00:00Z",
     }),
-    mkEp({
+    makeEpisode({
       id: 3,
       seasonNumber: 2,
       episodeNumber: 1,
@@ -309,9 +304,9 @@ describe("list_episodes query surface", () => {
     }),
   ]
 
-  it("filters by missing and hasAired conveniences", async () => {
-    mockEp(eps)
+  beforeEach(() => mockEp(eps))
 
+  it("filters by missing and hasAired conveniences", async () => {
     expect(
       ids(
         await Effect.runPromise(
