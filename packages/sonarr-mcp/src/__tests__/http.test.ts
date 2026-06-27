@@ -46,6 +46,18 @@ beforeAll(async () => {
 })
 afterAll(() => Effect.runPromise(Scope.close(scope, Exit.void)))
 
+// Raw POST for asserting the wire shape directly; `callMcp` unwraps the JSON-RPC
+// envelope, so it can't see whether the body is a bare object or a batch array.
+const post = (body: unknown): Promise<Response> =>
+  fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify(body),
+  })
+
 describe("sonarr-mcp — Streamable HTTP transport", () => {
   it("completes the MCP initialize handshake over POST /mcp", async () => {
     const result = Schema.decodeUnknownSync(McpSchema.InitializeResult)(
@@ -66,5 +78,16 @@ describe("sonarr-mcp — Streamable HTTP transport", () => {
     )
 
     expect(result.tools.map((tool) => tool.name).toSorted()).toEqual(TOOL_NAMES.toSorted())
+  })
+
+  // The unwrap only collapses a one-element array — guard the boundary so it
+  // can't grow into "strip any array wrapper." A bare object response (already
+  // correct, e.g. once upstream is fixed) must pass through untouched.
+  it("returns a bare JSON-RPC object, not an array, for a single request", async () => {
+    const response = await post({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} })
+    const message: unknown = await response.json()
+
+    expect(Array.isArray(message)).toBe(false)
+    expect(message).toMatchObject({ jsonrpc: "2.0", id: 1 })
   })
 })
