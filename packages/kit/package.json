@@ -1,20 +1,14 @@
 {
   "name": "@trugamr/kit",
   "version": "0.0.0",
-  "description": "Shared runtime foundation for the Effect-native Servarr SDKs: HTTP request engine, config schemas, and schema helpers.",
-  "files": [
-    "dist"
-  ],
+  "private": true,
+  "description": "Shared runtime foundation for the Effect-native Servarr SDKs: HTTP request engine, config schemas, and schema helpers. Consumed from source — not built or published.",
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": {
-      "types": "./dist/index.d.mts",
-      "default": "./dist/index.mjs"
-    }
+    ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsdown",
     "typecheck": "tsgo --noEmit",
     "test": "vitest run"
   },

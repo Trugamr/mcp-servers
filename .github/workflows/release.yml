@@ -2,7 +2,7 @@ name: Release
 
 # Changesets-driven release, and the single owner of image publishing. On each push to main:
 #   - pending changesets -> open/update a "Version Packages" PR (bumps versions, writes changelogs)
-#   - that PR merged      -> tag the release, create GitHub Releases, build the version-matched image
+#   - that PR merged      -> publish to npm, tag the release, create GitHub Releases, build the image
 #   - any other push      -> (re)build the moving `edge` image
 # The image build runs in this same run via the reusable docker-publish workflow on the built-in
 # GITHUB_TOKEN, so no PAT/App is needed — and a release merge builds the image once, not twice.
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   release:
-    name: Version or tag
+    name: Version or publish
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -44,21 +44,23 @@ jobs:
         with:
           node-version-file: .nvmrc # single source of truth (Node 24)
           cache: pnpm # caches the pnpm store, keyed on pnpm-lock.yaml
+          registry-url: https://registry.npmjs.org # writes an .npmrc that reads NODE_AUTH_TOKEN
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Create Version PR or tag release
+      - name: Create Version PR or publish release
         id: changesets
         uses: changesets/action@v1
         with:
           version: pnpm version-packages # applies changesets -> the "Version Packages" PR
-          publish: pnpm release # `changeset tag` once that PR merges (git tags only — no npm yet)
+          publish: pnpm release # once that PR merges: build, publish to npm, and tag the release
           # Conventional-commit title/message so the squash-merge lands as `chore: …` on main.
           title: "chore: version packages"
           commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # npm publish auth (granular automation token)
 
       - name: Resolve released sonarr-mcp version
         id: mcpver
