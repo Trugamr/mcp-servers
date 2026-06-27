@@ -10,8 +10,11 @@ import { Config, Effect, Layer, Redacted } from "effect"
  */
 export const SonarrLive = Layer.unwrapEffect(
   Effect.gen(function* () {
+    yield* Effect.logInfo("Loading Sonarr configuration from SONARR_BASE_URL / SONARR_API_KEY")
     const baseUrl = yield* Config.string("SONARR_BASE_URL")
     const apiKey = yield* Config.redacted("SONARR_API_KEY")
+    // baseUrl is a plain URL, safe to log; the API key stays redacted and is never logged.
+    yield* Effect.logInfo(`Loaded Sonarr configuration (baseUrl=${baseUrl})`)
     return Sonarr.layer({ baseUrl, apiKey: Redacted.value(apiKey) })
   }),
 )
