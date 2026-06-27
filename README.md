@@ -12,6 +12,9 @@ A library-first monorepo wrapping daily-use apps (Sonarr, the rest of the \*arr 
 | Package                                | Description          |
 | -------------------------------------- | -------------------- |
 | [`@trugamr/sonarr`](./packages/sonarr) | Typed Sonarr API SDK |
+| [`@trugamr/radarr`](./packages/radarr) | Typed Radarr API SDK |
+
+Internal, unpublished packages back these: [`@trugamr/kit`](./packages/kit) is the shared runtime SDK core (the HTTP request engine, config schemas, and schema helpers each SDK builds on), and [`@trugamr/testkit`](./packages/testkit) is the source-only test scaffolding (Testcontainers fixtures and an MCP JSON-RPC client).
 
 ## Getting started
 
@@ -29,9 +32,9 @@ pnpm build
 Two suites:
 
 - **Unit (`pnpm test`)** — the default. Every Sonarr HTTP call is mocked with `msw`; fast and needs nothing external.
-- **Integration (`pnpm test:integration`)** — drives the SDK _and_ the MCP server against a **real, throwaway Sonarr**. A Vitest global setup boots a Sonarr container via Testcontainers (shared scaffolding lives in the internal, source-only `@trugamr/testkit`), so it needs a running **Docker** daemon — plus **network access** to Sonarr's metadata service, since the SDK's series/episode tests seed a real show so those reads decode populated payloads instead of empty arrays. The MCP suite drives tools over the Streamable HTTP transport end-to-end (one pipe per shape — a GET, a list, a write round-trip, a typed error). The same command runs both suites locally and in CI (a dedicated `integration` job).
+- **Integration (`pnpm test:integration`)** — drives each SDK (and the Sonarr MCP server) against a **real, throwaway instance**. A Vitest global setup boots a Sonarr or Radarr container via Testcontainers (shared scaffolding lives in the internal, source-only `@trugamr/testkit`), so it needs a running **Docker** daemon — plus **network access** to the app's metadata service, since the SDK tests seed a real show/movie so those reads decode populated payloads instead of empty arrays. The MCP suite drives tools over the Streamable HTTP transport end-to-end (one pipe per shape — a GET, a list, a write round-trip, a typed error). The same command runs every suite locally and in CI (a dedicated `integration` job).
 
-To run integration tests against an instance you already have — skipping the container — set both env vars:
+To run integration tests against an instance you already have — skipping the container — set both env vars (Radarr uses the `RADARR_*` equivalents, default port 7878):
 
 ```sh
 SONARR_BASE_URL=http://localhost:8989 SONARR_API_KEY=... pnpm test:integration

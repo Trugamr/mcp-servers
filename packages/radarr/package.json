@@ -1,0 +1,30 @@
+{
+  "name": "@trugamr/radarr",
+  "version": "0.0.0",
+  "description": "Typed, Effect-native Radarr SDK.",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./effect": {
+      "types": "./dist/effect.d.mts",
+      "default": "./dist/effect.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsgo --noEmit",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@effect/platform": "0.96.2",
+    "@trugamr/kit": "workspace:*",
+    "effect": "3.21.4"
+  },
+  "devDependencies": {
+    "@trugamr/testkit": "workspace:*"
+  }
+}

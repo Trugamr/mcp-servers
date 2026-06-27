@@ -98,7 +98,7 @@ jobs:
 
       # `test:integration` depends on `^build`, so Turbo builds upstream packages first.
       - name: Integration tests
-        run: pnpm test:integration # boots a real Sonarr via Testcontainers
+        run: pnpm test:integration # boots real Sonarr/Radarr instances via Testcontainers
 
   actionlint:
     name: Lint workflows
