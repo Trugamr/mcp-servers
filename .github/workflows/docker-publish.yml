@@ -95,6 +95,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Scope the gha cache per package so the two MCP builds — which run in parallel (their
+          # concurrency groups differ by package) — don't clobber each other's layers on a shared
+          # scope.
+          cache-from: type=gha,scope=${{ inputs.package }}
+          cache-to: type=gha,scope=${{ inputs.package }},mode=max
           platforms: linux/amd64
