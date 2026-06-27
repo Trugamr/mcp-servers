@@ -387,10 +387,17 @@ const GetSeries = Tool.make("get_series", {
 const ListEpisodes = Tool.make("list_episodes", {
   description:
     "List episodes for a series (optionally one season) as lean summaries; filter, sort, " +
-    "and paginate (opaque cursor).",
+    "and paginate (opaque cursor). seriesId/seasonNumber scope the Sonarr fetch; filter " +
+    "narrows the fetched episodes client-side.",
   parameters: {
-    seriesId: Schema.Number,
-    seasonNumber: Schema.optional(Schema.Number),
+    seriesId: Schema.Number.annotations({
+      description: "Series whose episodes to fetch (required; sent to Sonarr).",
+    }),
+    seasonNumber: Schema.optional(
+      Schema.Number.annotations({
+        description: "Restrict the fetch to one season (sent to Sonarr).",
+      }),
+    ),
     filter: Schema.optional(EpisodeFilter),
     sort: Schema.optional(EpisodeSort),
     page: Schema.optional(PageInput),
