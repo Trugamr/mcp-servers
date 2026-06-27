@@ -1,18 +1,29 @@
 name: Publish Docker image
 
-# Publish a single moving `edge` image to GHCR on every merge to main; also
-# manually dispatchable. Versioned release tags are wired in a later slice.
+# Build and push the sonarr-mcp image to GHCR. Invoked only by release.yml (and manual
+# dispatch) — there is no `push:` trigger, so a release merge builds the image once, not twice:
+#   - no `version` input -> a moving `edge` tag (latest unreleased build)
+#   - a `version` input  -> `:X.Y.Z`, `:X.Y`, `:latest`
+# release.yml calls this on every push to main: with the released version when a release just
+# happened, otherwise with an empty version for an edge build. No PAT is needed — it all runs
+# inside the release run on the built-in GITHUB_TOKEN.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: Released sonarr-mcp version (e.g. 0.1.0). Empty for an edge build.
+        type: string
+        required: false
+        default: ""
 
 # GHCR push needs packages:write; checkout needs only read.
 permissions:
   contents: read
   packages: write
 
-# Don't cancel an in-flight publish; let pushes finish.
+# Don't cancel an in-flight publish; let it finish. (release.yml serializes its own runs per
+# ref, so the calls into here are already ordered.)
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -48,9 +59,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # One moving `edge` tag tracking the latest main.
+          # No `version` input -> `edge` (latest main). With one -> the semver tags + `latest`.
           tags: |
-            type=raw,value=edge
+            type=raw,value=edge,enable=${{ inputs.version == '' }}
+            type=semver,pattern={{version}},value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=raw,value=latest,enable=${{ inputs.version != '' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
