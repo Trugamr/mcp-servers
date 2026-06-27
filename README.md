@@ -5,7 +5,7 @@ A library-first monorepo wrapping daily-use apps (Sonarr, the rest of the \*arr 
 - **npm scope:** `@trugamr/*`
 - **Engine:** Node `24.x` (LTS) + pnpm `10.x`, resolved by [proto](https://moonrepo.dev/proto) from `package.json` (`engines.node` + `packageManager`)
 - **Toolchain:** `tsgo` (typecheck), `oxlint` (lint), `oxfmt` (format), `tsdown` (build), `vitest` + `msw` (unit tests), `testcontainers` (integration tests)
-- **Core:** every SDK is built on [Effect](https://effect.website) internally, but the default export is Promise-based and never surfaces Effect. Effect users opt in via the `/effect` subpath (e.g. `@trugamr/sonarr/effect`).
+- **Core:** every SDK is built on [Effect](https://effect.website). The published entry is the Effect surface on the `/effect` subpath (e.g. `@trugamr/sonarr/effect`); the bare `@trugamr/sonarr` entry is reserved for a Promise surface layered over it later.
 
 ## Packages
 
@@ -39,10 +39,20 @@ SONARR_BASE_URL=http://localhost:8989 SONARR_API_KEY=... pnpm test:integration
 
 ## Usage
 
-```ts
-import { Sonarr } from "@trugamr/sonarr"
+Build the client layer with `Sonarr.layer(config)`, provide it once, then read the client from context and compose operations natively:
 
-const sonarr = new Sonarr({ baseUrl: "http://localhost:8989", apiKey: "..." })
-const status = await sonarr.system.getStatus()
-console.log(status.version)
+```ts
+import { Sonarr } from "@trugamr/sonarr/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const sonarr = yield* Sonarr
+  const status = yield* sonarr.system.getStatus
+  console.log(status.version)
+})
+
+program.pipe(
+  Effect.provide(Sonarr.layer({ baseUrl: "http://localhost:8989", apiKey: "..." })),
+  Effect.runPromise,
+)
 ```
