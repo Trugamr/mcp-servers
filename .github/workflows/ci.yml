@@ -64,7 +64,7 @@ jobs:
         run: pnpm test
 
   integration:
-    name: Integration tests (live Sonarr)
+    name: Integration tests
     runs-on: ubuntu-latest # Docker is preinstalled, so Testcontainers works out of the box
     timeout-minutes: 15 # bound runaway/abusive jobs
     env:
