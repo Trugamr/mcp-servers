@@ -22,6 +22,13 @@ const ToolError = Schema.Struct({
 })
 
 /**
+ * Success shape for deletes: the affected id. A tool result must serialize to MCP
+ * content, and a void success encodes to no text, which the transport rejects —
+ * so a delete echoes the id it removed instead of returning nothing.
+ */
+const DeletedResource = Schema.Struct({ id: Schema.Number })
+
+/**
  * Surface a typed `SonarrError` as a JSON-serializable tool error. The message
  * is owned by the error itself, so this stays tag-agnostic as error types grow.
  */
@@ -88,7 +95,7 @@ const AddRootFolder = Tool.make("add_root_folder", {
 const DeleteRootFolder = Tool.make("delete_root_folder", {
   description: "Delete a root folder by its id.",
   parameters: { rootFolderId: Schema.Number },
-  success: Schema.Void,
+  success: DeletedResource,
   failure: ToolError,
 }).annotateContext(destructiveHints)
 
@@ -108,7 +115,7 @@ const CreateTag = Tool.make("create_tag", {
 const DeleteTag = Tool.make("delete_tag", {
   description: "Delete a tag by its id.",
   parameters: { tagId: Schema.Number },
-  success: Schema.Void,
+  success: DeletedResource,
   failure: ToolError,
 }).annotateContext(destructiveHints)
 
@@ -165,13 +172,14 @@ export const addRootFolder = (sonarr: SonarrService, path: string) =>
   handle(sonarr.rootFolder.add(path))
 
 export const deleteRootFolder = (sonarr: SonarrService, id: number) =>
-  handle(sonarr.rootFolder.delete(id))
+  handle(sonarr.rootFolder.delete(id).pipe(Effect.as({ id })))
 
 export const listTags = (sonarr: SonarrService) => handle(sonarr.tag.list)
 
 export const createTag = (sonarr: SonarrService, label: string) => handle(sonarr.tag.create(label))
 
-export const deleteTag = (sonarr: SonarrService, id: number) => handle(sonarr.tag.delete(id))
+export const deleteTag = (sonarr: SonarrService, id: number) =>
+  handle(sonarr.tag.delete(id).pipe(Effect.as({ id })))
 
 export const listHealth = (sonarr: SonarrService) => handle(sonarr.health.list)
 

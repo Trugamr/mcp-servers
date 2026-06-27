@@ -3,7 +3,15 @@ import { Cause, Effect, Exit, Option } from "effect"
 import { http, HttpResponse } from "msw"
 import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
-import { createTag, getSeries, getSystemStatus, listEpisodes, listSeries } from "../tools.js"
+import {
+  createTag,
+  deleteRootFolder,
+  deleteTag,
+  getSeries,
+  getSystemStatus,
+  listEpisodes,
+  listSeries,
+} from "../tools.js"
 import { episodeFixture } from "./fixtures/episode.js"
 import { seriesFixture } from "./fixtures/series.js"
 import { systemStatusFixture } from "./fixtures/system-status.js"
@@ -100,5 +108,28 @@ describe("library tool handlers", () => {
       _tag: "SonarrResponseError",
       message: "Sonarr returned HTTP 401",
     })
+  })
+})
+
+// A void success can't be represented as MCP tool content, so deletes echo the id.
+describe("delete tool handlers", () => {
+  it("delete_tag echoes the deleted id", async () => {
+    server.use(
+      http.delete(`${baseUrl}/api/v3/tag/5`, () => new HttpResponse(null, { status: 200 })),
+    )
+
+    const result = await Effect.runPromise(run((sonarr) => deleteTag(sonarr, 5)))
+
+    expect(result).toEqual({ id: 5 })
+  })
+
+  it("delete_root_folder echoes the deleted id", async () => {
+    server.use(
+      http.delete(`${baseUrl}/api/v3/rootfolder/3`, () => new HttpResponse(null, { status: 200 })),
+    )
+
+    const result = await Effect.runPromise(run((sonarr) => deleteRootFolder(sonarr, 3)))
+
+    expect(result).toEqual({ id: 3 })
   })
 })
