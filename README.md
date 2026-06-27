@@ -56,3 +56,7 @@ program.pipe(
   Effect.runPromise,
 )
 ```
+
+## Releasing
+
+Versioning and publishing are automated with [Changesets](https://github.com/changesets/changesets): add a changeset to your PR (`pnpm changeset`), and merging the generated "Version Packages" PR tags the release and publishes a version-matched `ghcr.io/trugamr/sonarr-mcp` image. See [docs/releasing.md](./docs/releasing.md).
