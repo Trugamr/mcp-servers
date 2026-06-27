@@ -11,7 +11,7 @@ import {
   Tag,
 } from "@trugamr/sonarr/effect"
 import { Tool, Toolkit } from "@effect/ai"
-import { Context, Effect, Either, Encoding, Order, Schema } from "effect"
+import { Context, Effect, Encoding, Order, Schema } from "effect"
 
 /** Tool-call failure shape returned to the model when a Sonarr call fails. */
 const ToolError = Schema.Struct({
@@ -136,32 +136,22 @@ const CursorPage = <A, I>(item: Schema.Schema<A, I>) =>
     totalRecords: Schema.Number,
   })
 
-// The opaque cursor encodes the next offset as base64url JSON. Clients must treat
+// The opaque cursor is just the next offset, base64url-encoded. Clients must treat
 // it as opaque; the offset is meaningful only against the same filter+sort, and a
 // default sort keeps it stable across calls.
-const encodeCursor = (offset: number) => Encoding.encodeBase64Url(JSON.stringify({ o: offset }))
-/** Decode a cursor to its offset; an unparseable cursor fails as a tool error. */
-const decodeCursor = (
-  cursor?: string,
-): Effect.Effect<number, { _tag: string; message: string }> => {
-  if (!isDefined(cursor)) {
-    return Effect.succeed(0)
-  }
-  return Effect.try({
-    try: () => {
-      const json = Either.getOrThrowWith(
-        Encoding.decodeBase64UrlString(cursor),
-        () => new Error("invalid base64url"),
+const CursorOffset = Schema.compose(Schema.NumberFromString, Schema.NonNegativeInt)
+const encodeCursor = (offset: number) => Encoding.encodeBase64Url(String(offset))
+/** Decode a cursor to its offset; an invalid cursor fails as a tool error. */
+const decodeCursor = (cursor?: string): Effect.Effect<number, { _tag: string; message: string }> =>
+  isDefined(cursor)
+    ? Encoding.decodeBase64UrlString(cursor).pipe(
+        Effect.flatMap(Schema.decode(CursorOffset)),
+        Effect.mapError(() => ({
+          _tag: "InvalidCursor",
+          message: `Invalid pagination cursor: ${cursor}`,
+        })),
       )
-      const o = (JSON.parse(json) as { o: unknown }).o
-      if (typeof o !== "number" || !Number.isInteger(o) || o < 0) {
-        throw new Error("bad offset")
-      }
-      return o
-    },
-    catch: () => ({ _tag: "InvalidCursor", message: `Invalid pagination cursor: ${cursor}` }),
-  })
-}
+    : Effect.succeed(0)
 
 /** Slice an already-filtered/sorted array at `offset` and project the page items. */
 const pageByCursor = <A, B>(
