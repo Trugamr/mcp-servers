@@ -93,32 +93,37 @@ const isNil = <T>(value: T): value is Extract<T, null | undefined> =>
 
 // Each matcher returns true when the value satisfies every present operator (an
 // absent operator is a no-op), so a missing filter short-circuits to `true`.
-const matchEq = <T>(v: T, f?: EqOp<T>) =>
-  !f ||
-  ((!isDefined(f.eq) || v === f.eq) &&
-    (!isDefined(f.ne) || v !== f.ne) &&
-    (!isDefined(f.in) || f.in.includes(v)) &&
-    (!isDefined(f.nin) || !f.nin.includes(v)))
+const matchEquality = <T>(value: T, operators?: EqOp<T>) =>
+  !operators ||
+  ((!isDefined(operators.eq) || value === operators.eq) &&
+    (!isDefined(operators.ne) || value !== operators.ne) &&
+    (!isDefined(operators.in) || operators.in.includes(value)) &&
+    (!isDefined(operators.nin) || !operators.nin.includes(value)))
 // A null/absent value fails any present ordered constraint.
-const matchOrd = <T extends string | number>(v: T | null | undefined, f?: OrdOp<T>) =>
-  !f ||
-  (!isNil(v) &&
-    matchEq(v, f) &&
-    (!isDefined(f.gte) || v >= f.gte) &&
-    (!isDefined(f.lte) || v <= f.lte) &&
-    (!isDefined(f.gt) || v > f.gt) &&
-    (!isDefined(f.lt) || v < f.lt))
-const matchText = (v: string | null | undefined, f?: TextOp) => {
-  const s = v ?? ""
+const matchOrdered = <T extends string | number>(
+  value: T | null | undefined,
+  operators?: OrdOp<T>,
+) =>
+  !operators ||
+  (!isNil(value) &&
+    matchEquality(value, operators) &&
+    (!isDefined(operators.gte) || value >= operators.gte) &&
+    (!isDefined(operators.lte) || value <= operators.lte) &&
+    (!isDefined(operators.gt) || value > operators.gt) &&
+    (!isDefined(operators.lt) || value < operators.lt))
+const matchText = (value: string | null | undefined, operators?: TextOp) => {
+  const text = value ?? ""
   return (
-    !f ||
-    ((!isDefined(f.eq) || s === f.eq) &&
-      (!isDefined(f.ne) || s !== f.ne) &&
-      (!isDefined(f.contains) || s.toLowerCase().includes(f.contains.toLowerCase())) &&
-      (!isDefined(f.in) || f.in.includes(s)))
+    !operators ||
+    ((!isDefined(operators.eq) || text === operators.eq) &&
+      (!isDefined(operators.ne) || text !== operators.ne) &&
+      (!isDefined(operators.contains) ||
+        text.toLowerCase().includes(operators.contains.toLowerCase())) &&
+      (!isDefined(operators.in) || operators.in.includes(text)))
   )
 }
-const matchBool = (v: boolean, f?: BoolOp) => !f || !isDefined(f.eq) || v === f.eq
+const matchBoolean = (value: boolean, operators?: BoolOp) =>
+  !operators || !isDefined(operators.eq) || value === operators.eq
 
 const clamp = (n: number, lo: number, hi: number) =>
   Math.min(Math.max(Math.trunc(Number.isFinite(n) ? n : lo), lo), hi)
@@ -244,12 +249,12 @@ type SeriesSortValue = Schema.Schema.Type<typeof SeriesSort>
 
 const matchesSeries = (s: Series, f: SeriesFilterValue = {}) =>
   matchText(s.title, f.title) &&
-  matchEq(s.status, f.status) &&
-  matchEq(s.seriesType, f.seriesType) &&
-  matchBool(s.monitored, f.monitored) &&
-  matchEq(s.qualityProfileId, f.qualityProfileId) &&
+  matchEquality(s.status, f.status) &&
+  matchEquality(s.seriesType, f.seriesType) &&
+  matchBoolean(s.monitored, f.monitored) &&
+  matchEquality(s.qualityProfileId, f.qualityProfileId) &&
   matchText(s.network, f.network) &&
-  matchOrd(s.year, f.year)
+  matchOrdered(s.year, f.year)
 
 const seriesOrder = (sort: SeriesSortValue = []) =>
   Order.combineAll(
@@ -313,10 +318,10 @@ const episodeAired = (e: Episode) => !isNil(e.airDateUtc) && Date.parse(e.airDat
 
 const matchesEpisode = (e: Episode, f: EpisodeFilterValue = {}) =>
   matchText(e.title, f.title) &&
-  matchBool(e.monitored, f.monitored) &&
-  matchBool(e.hasFile, f.hasFile) &&
+  matchBoolean(e.monitored, f.monitored) &&
+  matchBoolean(e.hasFile, f.hasFile) &&
   (!isDefined(f.missing) || f.missing === (e.monitored && !e.hasFile)) &&
-  matchOrd(e.airDateUtc, f.airDate) &&
+  matchOrdered(e.airDateUtc, f.airDate) &&
   (!isDefined(f.hasAired) || f.hasAired === episodeAired(e))
 
 const byEpisodeNumber: Order.Order<Episode> = Order.combine(
