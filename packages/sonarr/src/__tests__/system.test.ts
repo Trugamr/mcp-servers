@@ -1,7 +1,6 @@
-import { Cause, Effect, Exit, Option } from "effect"
+import { Effect } from "effect"
 import { http, HttpResponse } from "msw"
-import { setupServer } from "msw/node"
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest"
 import {
   Sonarr,
   SonarrDecodeError,
@@ -10,16 +9,11 @@ import {
   type SonarrConfigInput,
 } from "../effect.js"
 import { systemStatusFixture } from "./fixtures/system-status.js"
+import { apiKey, baseUrl, failureOf, setupMockServer, successOf } from "./helpers.js"
 
-const baseUrl = "http://sonarr.test"
-const apiKey = "test-api-key"
 const statusUrl = `${baseUrl}/api/v3/system/status`
 
-const server = setupServer()
-
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }))
-afterEach(() => server.resetHandlers())
-afterAll(() => server.close())
+const server = setupMockServer()
 
 // Resolve `system.getStatus` against a given config to an Exit, so each test can
 // assert on the success value or read the typed error straight from the failure
@@ -29,23 +23,6 @@ const runStatus = (config: SonarrConfigInput = { baseUrl, apiKey }) =>
     Effect.provide(Sonarr.layer(config)),
     Effect.runPromiseExit,
   )
-
-const successOf = <A, E>(exit: Exit.Exit<A, E>): A => {
-  if (Exit.isFailure(exit)) {
-    throw new Error(`expected success: ${Cause.pretty(exit.cause)}`)
-  }
-  return exit.value
-}
-
-// Pull the typed failure out of the channel. A defect (or success) yields `None`
-// here and throws, so every error test also proves the failure is typed — not a
-// thrown exception or an Effect defect.
-const failureOf = <A, E>(exit: Exit.Exit<A, E>): E => {
-  if (Exit.isSuccess(exit)) {
-    throw new Error("expected failure, got success")
-  }
-  return Option.getOrThrow(Cause.failureOption(exit.cause))
-}
 
 describe("Sonarr service — system.getStatus", () => {
   it("decodes a valid status response", async () => {
