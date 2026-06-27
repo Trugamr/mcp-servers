@@ -24,6 +24,6 @@
     "effect": "3.21.4"
   },
   "devDependencies": {
-    "testcontainers": "12.0.3"
+    "@trugamr/testkit": "workspace:*"
   }
 }
