@@ -9,6 +9,7 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
     "test:watch": "vitest"
   },
   "devDependencies": {
