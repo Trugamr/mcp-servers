@@ -264,7 +264,7 @@ describe("list_series query surface", () => {
     expect(def.items.map((i) => i.title)).toEqual(["Alpha", "Bravo", "Charlie"])
   })
 
-  it("projects lean summaries by default and re-adds heavy blocks via include", async () => {
+  it("projects lean summaries, dropping the heavy blocks", async () => {
     mockSeries(library)
 
     const def = await Effect.runPromise(run((s) => listSeries(s)))
@@ -274,19 +274,6 @@ describe("list_series query surface", () => {
     expect(first).not.toHaveProperty("statistics")
     expect(first).not.toHaveProperty("ratings")
     expect(first).not.toHaveProperty("overview")
-
-    const withStats = await Effect.runPromise(
-      run((s) =>
-        listSeries(s, {
-          filter: { status: { in: ["ended"] }, monitored: { eq: true } },
-          include: ["statistics", "ratings"],
-        }),
-      ),
-    )
-    expect(withStats.items).toHaveLength(1)
-    expect(withStats.items[0]).toHaveProperty("statistics")
-    expect(withStats.items[0]).toHaveProperty("ratings")
-    expect(withStats.items[0]).not.toHaveProperty("seasons")
   })
 
   it("returns an empty page when nothing matches", async () => {

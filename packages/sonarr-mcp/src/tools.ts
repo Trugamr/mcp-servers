@@ -240,9 +240,8 @@ const pageByCursor = <A, B>(
 // --- Series query ----------------------------------------------------------
 
 // Lean list projection. The heavy `seasons[]`/`statistics`/`ratings` blocks are
-// dropped by default and re-added only on request via `include`; full detail is
-// always available through `get_series`. Derived from the SDK `Series` so field
-// types track the source schema.
+// dropped; full detail is available through `get_series`. Derived from the SDK
+// `Series` so field types track the source schema.
 const SeriesSummary = Series.pick(
   "id",
   "title",
@@ -255,16 +254,9 @@ const SeriesSummary = Series.pick(
   "seriesType",
   "path",
 )
-const SeriesView = Schema.Struct({
-  ...SeriesSummary.fields,
-  statistics: Series.fields.statistics,
-  seasons: Schema.optional(Series.fields.seasons),
-  ratings: Series.fields.ratings,
-})
-type SeriesView = Schema.Schema.Type<typeof SeriesView>
-type SeriesInclude = "statistics" | "seasons" | "ratings"
+type SeriesSummary = Schema.Schema.Type<typeof SeriesSummary>
 
-const toSeriesView = (s: Series, include: ReadonlyArray<SeriesInclude>): SeriesView => ({
+const toSeriesSummary = (s: Series): SeriesSummary => ({
   id: s.id,
   title: s.title,
   year: s.year,
@@ -275,9 +267,6 @@ const toSeriesView = (s: Series, include: ReadonlyArray<SeriesInclude>): SeriesV
   seriesType: s.seriesType,
   ...(s.network !== undefined ? { network: s.network } : {}),
   ...(s.path !== undefined ? { path: s.path } : {}),
-  ...(include.includes("statistics") && s.statistics ? { statistics: s.statistics } : {}),
-  ...(include.includes("seasons") ? { seasons: s.seasons } : {}),
-  ...(include.includes("ratings") && s.ratings ? { ratings: s.ratings } : {}),
 })
 
 const seriesSortKey: Record<"title" | "year" | "added", (s: Series) => string | number> = {
@@ -435,15 +424,13 @@ const GetSystemStatus = Tool.make("get_system_status", {
 const ListSeries = Tool.make("list_series", {
   description:
     "List series as lean summaries; filter, sort, and paginate (opaque cursor). " +
-    "`include` re-adds heavy blocks (statistics/seasons/ratings) only when needed — " +
-    "otherwise call get_series for full detail.",
+    "Call get_series for full detail (seasons, statistics, ratings).",
   parameters: {
     filter: Schema.optional(SeriesFilter),
     sort: Schema.optional(SeriesSort),
-    include: Schema.optional(Schema.Array(Schema.Literal("statistics", "seasons", "ratings"))),
     page: Schema.optional(PageInput),
   },
-  success: CursorPage(SeriesView),
+  success: CursorPage(SeriesSummary),
   failure: ToolError,
 }).annotateContext(readonlyHints)
 
@@ -537,7 +524,6 @@ const handleList = <A>(effect: Effect.Effect<ReadonlyArray<A>, SonarrError>) =>
 export interface SeriesListArgs {
   readonly filter?: SeriesFilterValue | undefined
   readonly sort?: SeriesSortValue | undefined
-  readonly include?: ReadonlyArray<SeriesInclude> | undefined
   readonly page?: PageInputValue | undefined
 }
 
@@ -558,8 +544,7 @@ export const listSeries = (sonarr: SonarrService, p: SeriesListArgs = {}) =>
         Effect.map((all) => {
           const filtered = all.filter((s) => matchesSeries(s, p.filter))
           const sorted = filtered.toSorted(seriesComparator(p.sort))
-          const include = p.include ?? []
-          return pageByCursor(sorted, offset, p.page?.size, (s) => toSeriesView(s, include))
+          return pageByCursor(sorted, offset, p.page?.size, toSeriesSummary)
         }),
       ),
     ),

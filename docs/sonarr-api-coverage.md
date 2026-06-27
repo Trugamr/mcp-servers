@@ -20,8 +20,6 @@ filtering, sorting, and paging happen in the MCP layer:
   `gte`/`lte`/`gt`/`lt` (ordered fields), `contains` (text), `hasAny`/`hasAll`
   (array membership). e.g. `{ filter: { status: { in: ["ended"] }, year: { gte: 2015 } } }`.
 - **sort** — `[{ field, order }]`; `order` is `asc` (default) or `desc`, multi-field.
-- **include** (`list_series` only) — re-adds heavy blocks (`statistics` / `seasons` /
-  `ratings`) to the otherwise-lean summary item; full detail is always via `get_series`.
 - **page** — opaque cursor pagination: `{ size?, cursor? }` in; the result envelope is
   `{ items, nextCursor?, totalRecords }` (`nextCursor` absent on the last page,
   `totalRecords` is the filtered count). The same envelope will back the future
