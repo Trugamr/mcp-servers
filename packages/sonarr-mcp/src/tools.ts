@@ -11,7 +11,7 @@ import {
   Tag,
 } from "@trugamr/sonarr/effect"
 import { Tool, Toolkit } from "@effect/ai"
-import { Context, Effect, Encoding, Order, Schema } from "effect"
+import { Context, Effect, Encoding, Order, Predicate, Schema } from "effect"
 
 /** Tool-call failure shape returned to the model when a Sonarr call fails. */
 const ToolError = Schema.Struct({
@@ -93,43 +93,39 @@ type OrdOp<A> = Schema.Schema.Type<ReturnType<typeof Ord<A, A>>>
 type TextOp = Schema.Schema.Type<typeof Text>
 type BoolOp = Schema.Schema.Type<typeof Bool>
 
-const isDefined = <T>(value: T): value is Exclude<T, undefined> => value !== undefined
-const isNil = <T>(value: T): value is Extract<T, null | undefined> =>
-  !isDefined(value) || value === null
-
 // Each matcher returns true when the value satisfies every present operator (an
 // absent operator is a no-op), so a missing filter short-circuits to `true`.
 const matchEquality = <T>(value: T, operators?: EqOp<T>) =>
   !operators ||
-  ((!isDefined(operators.eq) || value === operators.eq) &&
-    (!isDefined(operators.ne) || value !== operators.ne) &&
-    (!isDefined(operators.in) || operators.in.includes(value)) &&
-    (!isDefined(operators.nin) || !operators.nin.includes(value)))
+  ((Predicate.isUndefined(operators.eq) || value === operators.eq) &&
+    (Predicate.isUndefined(operators.ne) || value !== operators.ne) &&
+    (Predicate.isUndefined(operators.in) || operators.in.includes(value)) &&
+    (Predicate.isUndefined(operators.nin) || !operators.nin.includes(value)))
 // A null/absent value fails any present ordered constraint.
 const matchOrdered = <T extends string | number>(
   value: T | null | undefined,
   operators?: OrdOp<T>,
 ) =>
   !operators ||
-  (!isNil(value) &&
+  (Predicate.isNotNullable(value) &&
     matchEquality(value, operators) &&
-    (!isDefined(operators.gte) || value >= operators.gte) &&
-    (!isDefined(operators.lte) || value <= operators.lte) &&
-    (!isDefined(operators.gt) || value > operators.gt) &&
-    (!isDefined(operators.lt) || value < operators.lt))
+    (Predicate.isUndefined(operators.gte) || value >= operators.gte) &&
+    (Predicate.isUndefined(operators.lte) || value <= operators.lte) &&
+    (Predicate.isUndefined(operators.gt) || value > operators.gt) &&
+    (Predicate.isUndefined(operators.lt) || value < operators.lt))
 const matchText = (value: string | null | undefined, operators?: TextOp) => {
   const text = value ?? ""
   return (
     !operators ||
-    ((!isDefined(operators.eq) || text === operators.eq) &&
-      (!isDefined(operators.ne) || text !== operators.ne) &&
-      (!isDefined(operators.contains) ||
+    ((Predicate.isUndefined(operators.eq) || text === operators.eq) &&
+      (Predicate.isUndefined(operators.ne) || text !== operators.ne) &&
+      (Predicate.isUndefined(operators.contains) ||
         text.toLowerCase().includes(operators.contains.toLowerCase())) &&
-      (!isDefined(operators.in) || operators.in.includes(text)))
+      (Predicate.isUndefined(operators.in) || operators.in.includes(text)))
   )
 }
 const matchBoolean = (value: boolean, operators?: BoolOp) =>
-  !operators || !isDefined(operators.eq) || value === operators.eq
+  !operators || Predicate.isUndefined(operators.eq) || value === operators.eq
 
 const clamp = (n: number, lo: number, hi: number) =>
   Math.min(Math.max(Math.trunc(Number.isFinite(n) ? n : lo), lo), hi)
@@ -157,7 +153,7 @@ const encodeCursor = (offset: number) =>
   Encoding.encodeBase64Url(Schema.encodeSync(Cursor)({ offset }))
 /** Decode a cursor to its offset; an invalid cursor fails as a tool error. */
 const decodeCursor = (cursor?: string): Effect.Effect<number, { _tag: string; message: string }> =>
-  isDefined(cursor)
+  Predicate.isNotUndefined(cursor)
     ? Encoding.decodeBase64UrlString(cursor).pipe(
         Effect.flatMap(Schema.decode(Cursor)),
         Effect.map((decoded) => decoded.offset),
@@ -213,8 +209,8 @@ const toSeriesSummary = (s: Series): SeriesSummary => ({
   tvdbId: s.tvdbId,
   qualityProfileId: s.qualityProfileId,
   seriesType: s.seriesType,
-  ...(isDefined(s.network) && { network: s.network }),
-  ...(isDefined(s.path) && { path: s.path }),
+  ...(Predicate.isNotUndefined(s.network) && { network: s.network }),
+  ...(Predicate.isNotUndefined(s.path) && { path: s.path }),
 })
 
 const seriesOrders: Record<"title" | "year" | "added", Order.Order<Series>> = {
@@ -291,9 +287,9 @@ const toEpisodeSummary = (e: Episode): EpisodeSummary => ({
   episodeNumber: e.episodeNumber,
   hasFile: e.hasFile,
   monitored: e.monitored,
-  ...(isDefined(e.title) && { title: e.title }),
-  ...(isDefined(e.airDate) && { airDate: e.airDate }),
-  ...(isDefined(e.overview) && { overview: e.overview }),
+  ...(Predicate.isNotUndefined(e.title) && { title: e.title }),
+  ...(Predicate.isNotUndefined(e.airDate) && { airDate: e.airDate }),
+  ...(Predicate.isNotUndefined(e.overview) && { overview: e.overview }),
 })
 
 const EpisodeFilter = Schema.Struct({
@@ -328,7 +324,8 @@ const EpisodeSort = Schema.Array(
 )
 type EpisodeSortValue = Schema.Schema.Type<typeof EpisodeSort>
 
-const episodeAired = (e: Episode) => !isNil(e.airDateUtc) && Date.parse(e.airDateUtc) <= Date.now()
+const episodeAired = (e: Episode) =>
+  Predicate.isNotNullable(e.airDateUtc) && Date.parse(e.airDateUtc) <= Date.now()
 
 // `series.id`/`season.number` scope the Sonarr fetch, so they're applied
 // server-side, not here — this narrows the fetched episodes by the remaining fields.
@@ -336,9 +333,9 @@ const matchesEpisode = (e: Episode, f: EpisodeFilterValue) =>
   matchText(e.title, f.title) &&
   matchBoolean(e.monitored, f.monitored) &&
   matchBoolean(e.hasFile, f.hasFile) &&
-  (!isDefined(f.missing) || f.missing === (e.monitored && !e.hasFile)) &&
+  (Predicate.isUndefined(f.missing) || f.missing === (e.monitored && !e.hasFile)) &&
   matchOrdered(e.airDateUtc, f.airDate) &&
-  (!isDefined(f.hasAired) || f.hasAired === episodeAired(e))
+  (Predicate.isUndefined(f.hasAired) || f.hasAired === episodeAired(e))
 
 const byEpisodeNumber: Order.Order<Episode> = Order.combine(
   Order.mapInput(Order.number, (e: Episode) => e.seasonNumber),
@@ -350,8 +347,9 @@ const byAirDate =
   (x, y) => {
     const ax = x.airDateUtc
     const ay = y.airDateUtc
-    if (isNil(ax) || isNil(ay)) {
-      return isNil(ax) ? (isNil(ay) ? 0 : 1) : -1
+    if (Predicate.isNullable(ax) || Predicate.isNullable(ay)) {
+      // false (present) sorts before true (absent), so nulls land last.
+      return Order.boolean(Predicate.isNullable(ax), Predicate.isNullable(ay))
     }
     return order === "asc" ? Order.string(ax, ay) : Order.string(ay, ax)
   }
