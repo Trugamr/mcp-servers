@@ -1,11 +1,11 @@
 name: Release
 
-# Changesets-driven release. On each push to main:
-#   - pending changesets  -> open/update a "Version Packages" PR (bumps versions, writes changelogs)
-#   - no changesets (that PR merged) -> tag the release, create GitHub Releases, then build the
-#     version-matched container image.
-# Uses only the built-in GITHUB_TOKEN; the versioned Docker build runs in this same run via the
-# reusable docker-publish workflow, so no PAT/App is needed.
+# Changesets-driven release, and the single owner of image publishing. On each push to main:
+#   - pending changesets -> open/update a "Version Packages" PR (bumps versions, writes changelogs)
+#   - that PR merged      -> tag the release, create GitHub Releases, build the version-matched image
+#   - any other push      -> (re)build the moving `edge` image
+# The image build runs in this same run via the reusable docker-publish workflow on the built-in
+# GITHUB_TOKEN, so no PAT/App is needed — and a release merge builds the image once, not twice.
 on:
   push:
     branches: [main]
@@ -63,14 +63,15 @@ jobs:
         env:
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
         run: |
-          version="$(jq -r '.[] | select(.name == "@trugamr/sonarr-mcp") | .version' <<<"${PUBLISHED:-[]}")"
+          version="$(jq -r '.[] | select(.name == "@trugamr/sonarr-mcp") | .version' <<<"$PUBLISHED")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-  # Build the version-matched image only when this release included sonarr-mcp.
+  # Publish the image on every push: the released version when sonarr-mcp was just released,
+  # otherwise an empty version for a moving `edge` build. A second containerized package would
+  # fan out here — extract its version above and matrix the build — rather than copy this job.
   docker:
-    name: Publish versioned image
+    name: Publish image
     needs: release
-    if: needs.release.outputs.mcpVersion != ''
     permissions:
       contents: read
       packages: write
