@@ -1,7 +1,7 @@
-import { inject } from "vitest"
+import { injectSonarr } from "./integration.js"
 
-// Writable root-folder paths, provisioned as tmpfs mounts by ./setup.ts so Sonarr
-// accepts them as root folders without a real disk.
+// Writable root-folder paths a seeding suite mounts as tmpfs (via the global
+// setup's `tmpfs` option) so Sonarr accepts them as root folders without a real disk.
 export const SERIES_ROOT_FOLDER = "/data/tv"
 export const SPARE_ROOT_FOLDER = "/data/extra"
 
@@ -12,10 +12,11 @@ const SERIES_TITLE = "A Series of Unfortunate Events"
 
 /** Drive Sonarr's API directly with the injected credentials, throwing on non-2xx. */
 const sonarr = async (path: string, init?: RequestInit): Promise<Response> => {
-  const response = await fetch(`${inject("sonarrBaseUrl")}${path}`, {
+  const { baseUrl, apiKey } = injectSonarr()
+  const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
-      "X-Api-Key": inject("sonarrApiKey"),
+      "X-Api-Key": apiKey,
       "Content-Type": "application/json",
       ...init?.headers,
     },

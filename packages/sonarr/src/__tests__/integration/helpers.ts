@@ -1,13 +1,10 @@
-import { Cause, Effect, Exit, Option } from "effect"
-import { inject } from "vitest"
+import { injectSonarr } from "@trugamr/testkit/sonarr"
+import { Cause, Effect, Exit } from "effect"
 import { Sonarr, type SonarrService } from "../../effect.js"
 
 // The live instance resolved by the global setup — either the booted container or
 // the one supplied via SONARR_BASE_URL / SONARR_API_KEY.
-const LiveSonarr = Sonarr.layer({
-  baseUrl: inject("sonarrBaseUrl"),
-  apiKey: inject("sonarrApiKey"),
-})
+const LiveSonarr = Sonarr.layer(injectSonarr())
 
 /**
  * Resolve a client operation against the live instance to an Exit, so each test
@@ -23,15 +20,4 @@ export const successOf = <A, E>(exit: Exit.Exit<A, E>): A => {
     throw new Error(`expected success: ${Cause.pretty(exit.cause)}`)
   }
   return exit.value
-}
-
-/**
- * Pull the typed failure out of an Exit. A defect (or success) yields `None` here
- * and throws, so every error test also proves the failure is typed.
- */
-export const failureOf = <A, E>(exit: Exit.Exit<A, E>): E => {
-  if (Exit.isSuccess(exit)) {
-    throw new Error("expected failure, got success")
-  }
-  return Option.getOrThrow(Cause.failureOption(exit.cause))
 }
