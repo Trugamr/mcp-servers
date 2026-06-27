@@ -2,6 +2,21 @@
   "name": "@trugamr/sonarr-mcp",
   "version": "0.0.0",
   "description": "MCP server exposing the Sonarr SDK to AI agents as tools (stdio + HTTP).",
+  "keywords": [
+    "ai",
+    "effect",
+    "mcp",
+    "model-context-protocol",
+    "servarr",
+    "sonarr"
+  ],
+  "homepage": "https://github.com/Trugamr/mcp-servers/tree/main/packages/sonarr-mcp#readme",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Trugamr/mcp-servers.git",
+    "directory": "packages/sonarr-mcp"
+  },
   "bin": {
     "sonarr-mcp": "./dist/index.mjs"
   },
@@ -10,6 +25,9 @@
   ],
   "type": "module",
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsgo --noEmit",

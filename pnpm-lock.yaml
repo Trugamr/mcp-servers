@@ -65,13 +65,13 @@ importers:
       '@effect/platform':
         specifier: 0.96.2
         version: 0.96.2(effect@3.21.4)
-      '@trugamr/kit':
-        specifier: workspace:*
-        version: link:../kit
       effect:
         specifier: 3.21.4
         version: 3.21.4
     devDependencies:
+      '@trugamr/kit':
+        specifier: workspace:*
+        version: link:../kit
       '@trugamr/testkit':
         specifier: workspace:*
         version: link:../testkit
@@ -81,13 +81,13 @@ importers:
       '@effect/platform':
         specifier: 0.96.2
         version: 0.96.2(effect@3.21.4)
-      '@trugamr/kit':
-        specifier: workspace:*
-        version: link:../kit
       effect:
         specifier: 3.21.4
         version: 3.21.4
     devDependencies:
+      '@trugamr/kit':
+        specifier: workspace:*
+        version: link:../kit
       '@trugamr/testkit':
         specifier: workspace:*
         version: link:../testkit
