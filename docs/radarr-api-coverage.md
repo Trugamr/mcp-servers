@@ -25,6 +25,12 @@ Legend: `[x]` shipped · `[ ]` planned. Paths omit the `/api/v3` prefix (Radarr'
 - [ ] `DELETE /movie/{id}` — delete a movie (`deleteFiles`, `addImportExclusion`)
 - [ ] `GET /movie/lookup?term=`, `GET /movie/lookup/tmdb?tmdbId=` — search for a movie to add (**Movie Lookup**)
 
+The `Movie` schema models a lean identify-and-reason-about field set; `Schema.Struct` drops the rest, so these payload fields are **shipped by Radarr but not yet modeled**:
+
+- `ratings` — per-provider scores (`imdb` / `tmdb` / `metacritic` / `rottenTomatoes` / `trakt`, each `{ votes, value, type }`). Worth surfacing for the agent; deferred only because it nests differently from Sonarr's flat `{ votes, value }` and needs its own sub-schema rather than a copy.
+- `movieFile` — the downloaded file's quality, size, and media info.
+- `images`, `collection`, `alternateTitles`, `originalTitle`, `popularity`.
+
 ## Movie File
 
 - [ ] `GET /moviefile?movieId=` — list movie files
