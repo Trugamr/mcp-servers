@@ -69,18 +69,16 @@ jobs:
         env:
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
         run: |
-          # publishedPackages is empty on a non-release push; treat that as "nothing published"
-          # so each MCP falls back to an edge build. A released MCP picks up its own version, so
-          # the two images version independently.
-          published="${PUBLISHED:-[]}"
-          version_of() { jq -r --arg name "$1" '.[]? | select(.name == $name) | .version' <<<"$published"; }
-          matrix="$(jq -cn \
-            --arg sonarr "$(version_of "@trugamr/sonarr-mcp")" \
-            --arg radarr "$(version_of "@trugamr/radarr-mcp")" \
-            '{include: [
-              {package: "sonarr-mcp", version: $sonarr},
-              {package: "radarr-mcp", version: $radarr}
-            ]}')"
+          # `publishedPackages` is what this run published ([{name, version}, ...]), empty on a
+          # non-release push. Build one matrix entry per MCP: its just-published version, or "" for
+          # an edge build when it wasn't part of this release. The scoped npm name is the short name
+          # under @trugamr, so one list drives both.
+          matrix="$(jq -cn --argjson published "${PUBLISHED:-[]}" '
+            ($published | map({key: .name, value: .version}) | from_entries) as $version
+            | ["sonarr-mcp", "radarr-mcp"]
+            | map({ package: ., version: ($version["@trugamr/" + .] // "") })
+            | { include: . }
+          ')"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   # Publish each MCP image on every push: the released version when that MCP was just released,
