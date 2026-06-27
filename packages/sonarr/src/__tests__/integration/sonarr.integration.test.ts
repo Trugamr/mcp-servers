@@ -13,8 +13,7 @@ describe("Sonarr SDK against a pinned Sonarr instance", () => {
     it("decodes the status payload and reports the pinned version", async () => {
       const status = successOf(await runExit((sonarr) => sonarr.system.getStatus))
 
-      expect(status.appName).toBe("Sonarr")
-      expect(status.version).toBe(SONARR_VERSION)
+      expect(status).toMatchObject({ appName: "Sonarr", version: SONARR_VERSION })
     })
   })
 
@@ -72,8 +71,7 @@ describe("Sonarr SDK against a pinned Sonarr instance", () => {
   describe("rootFolder write round-trip", () => {
     it("adds, lists, then deletes a root folder", async () => {
       const added = successOf(await runExit((sonarr) => sonarr.rootFolder.add(SPARE_ROOT_FOLDER)))
-      expect(added.path).toBe(SPARE_ROOT_FOLDER)
-      expect(added.accessible).toBe(true)
+      expect(added).toMatchObject({ path: SPARE_ROOT_FOLDER, accessible: true })
 
       const afterAdd = successOf(await runExit((sonarr) => sonarr.rootFolder.list))
       expect(afterAdd.some((folder) => folder.id === added.id)).toBe(true)
@@ -95,19 +93,22 @@ describe("Sonarr SDK against a pinned Sonarr instance", () => {
       const series = successOf(await runExit((sonarr) => sonarr.series.list))
       const match = series.find((entry) => entry.id === seeded.id)
 
-      expect(match).toBeDefined()
-      expect(match?.title).toBe(seeded.title)
-      expect(match?.tvdbId).toBe(seeded.tvdbId)
-      expect(match?.year).toBe(2017)
+      expect(match).toMatchObject({
+        title: seeded.title,
+        tvdbId: seeded.tvdbId,
+        year: 2017,
+      })
     })
 
     it("gets the seeded series by id, decoding its seasons", async () => {
       const series = successOf(await runExit((sonarr) => sonarr.series.get(seeded.id)))
 
-      expect(series.id).toBe(seeded.id)
-      expect(series.tvdbId).toBe(seeded.tvdbId)
-      expect(series.status).toBe("ended")
-      expect(series.ended).toBe(true)
+      expect(series).toMatchObject({
+        id: seeded.id,
+        tvdbId: seeded.tvdbId,
+        status: "ended",
+        ended: true,
+      })
       expect(series.seasons.length).toBeGreaterThan(0)
     })
 
@@ -124,9 +125,7 @@ describe("Sonarr SDK against a pinned Sonarr instance", () => {
       const error = failureOf(await runExit((sonarr) => sonarr.series.get(999_999)))
 
       expect(error).toBeInstanceOf(SonarrResponseError)
-      if (error instanceof SonarrResponseError) {
-        expect(error.status).toBe(404)
-      }
+      expect(error).toMatchObject({ status: 404 })
     })
   })
 })
