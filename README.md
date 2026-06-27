@@ -32,7 +32,7 @@ pnpm build
 Two suites:
 
 - **Unit (`pnpm test`)** — the default. Every Sonarr HTTP call is mocked with `msw`; fast and needs nothing external.
-- **Integration (`pnpm test:integration`)** — drives each SDK (and the Sonarr MCP server) against a **real, throwaway instance**. A Vitest global setup boots a Sonarr or Radarr container via Testcontainers (shared scaffolding lives in the internal, source-only `@trugamr/testkit`), so it needs a running **Docker** daemon — plus **network access** to the app's metadata service, since the SDK tests seed a real show/movie so those reads decode populated payloads instead of empty arrays. The MCP suite drives tools over the Streamable HTTP transport end-to-end (one pipe per shape — a GET, a list, a write round-trip, a typed error). The same command runs every suite locally and in CI (a dedicated `integration` job).
+- **Integration (`pnpm test:integration`)** — drives each SDK (and the Sonarr and Radarr MCP servers) against a **real, throwaway instance**. A Vitest global setup boots a Sonarr or Radarr container via Testcontainers (shared scaffolding lives in the internal, source-only `@trugamr/testkit`), so it needs a running **Docker** daemon — plus **network access** to the app's metadata service, since the SDK tests seed a real show/movie so those reads decode populated payloads instead of empty arrays. The MCP suite drives tools over the Streamable HTTP transport end-to-end (one pipe per shape — a GET, a list, a write round-trip, a typed error). The same command runs every suite locally and in CI (a dedicated `integration` job).
 
 To run integration tests against an instance you already have — skipping the container — set both env vars (Radarr uses the `RADARR_*` equivalents, default port 7878):
 
