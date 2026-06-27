@@ -6,6 +6,13 @@ import { failureOf, runExit, successOf } from "./helpers.js"
 // Drives the SDK against a real Radarr (booted by ./setup.ts), decoding actual
 // Radarr payloads through the SDK's schemas so schema drift fails loudly.
 describe("Radarr SDK against a pinned Radarr instance", () => {
+  // One real movie seeded once for the whole file: movie reads assert its payload,
+  // and the interactive release search needs a library movieId to search against.
+  let seeded: SeededMovie
+  beforeAll(async () => {
+    seeded = await seedMovie()
+  })
+
   describe("system.getStatus", () => {
     it("decodes the status and reports the pinned version", async () => {
       const status = successOf(await runExit((radarr) => radarr.system.getStatus))
@@ -23,11 +30,6 @@ describe("Radarr SDK against a pinned Radarr instance", () => {
   })
 
   describe("movie reads (seeded with a real film)", () => {
-    let seeded: SeededMovie
-    beforeAll(async () => {
-      seeded = await seedMovie()
-    })
-
     it("lists the seeded movie, decoding the Movie payload", async () => {
       const movies = successOf(await runExit((radarr) => radarr.movie.list))
       const match = movies.find((entry) => entry.id === seeded.id)
@@ -49,6 +51,23 @@ describe("Radarr SDK against a pinned Radarr instance", () => {
         status: "released",
         hasFile: false,
       })
+    })
+  })
+
+  describe("release + queue reads", () => {
+    it("runs an interactive search that decodes to no candidates without indexers", async () => {
+      // The booted instance has no indexers configured, so the search is reachable
+      // and decodes through Schema.Array(Release) but yields nothing. Live results
+      // need a real indexer; grab needs a download client — neither is exercised here.
+      const releases = successOf(await runExit((radarr) => radarr.release.search(seeded.id)))
+
+      expect(releases).toEqual([])
+    })
+
+    it("lists an empty download queue on a fresh instance", async () => {
+      const page = successOf(await runExit((radarr) => radarr.queue.list))
+
+      expect(page).toMatchObject({ records: [], totalRecords: 0 })
     })
   })
 })

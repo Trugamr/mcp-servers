@@ -69,9 +69,18 @@ The `Movie` schema models a lean identify-and-reason-about field set; `Schema.St
 
 - [ ] `GET /calendar?start=&end=` — upcoming/released movies in a date range
 
+## Release
+
+Interactive search hits the configured indexers live for a movie **already in the library**, then a grab hands the chosen release to the download client (where it surfaces in the queue). Codec (HEVC/x265) isn't a structured field — it lives only in a release's `title`, so a caller filtering for e.g. "1080p hevc" reads `quality` for the resolution and the title string for the codec.
+
+- [x] `GET /release?movieId=` — interactive search for a movie's releases — `release.search`
+- [x] `POST /release` — grab a release (`guid` + `indexerId`) and send it to the download client — `release.grab`
+- [ ] `POST /release/push` — push a release Radarr didn't find itself
+
 ## Queue
 
-- [ ] `GET /queue` — paginated download queue
+- [x] `GET /queue` — download queue, page one — `queue.list`
+- [ ] `GET /queue` — full paging (`page`, `pageSize`, `sortKey`)
 - [ ] `DELETE /queue/{id}` — remove a queue item
 - [ ] `GET /queue/details`, `GET /queue/status`
 
@@ -92,4 +101,4 @@ The `Movie` schema models a lean identify-and-reason-about field set; `Schema.St
 
 ## Other resources (not yet started)
 
-Collection, Credit, Custom Format, Quality Definition, Indexer, Download Client, Import List, Notification, Release / Release Push, Blocklist, Metadata, Media Management & Naming config, Update, Log.
+Collection, Credit, Custom Format, Quality Definition, Indexer, Download Client, Import List, Notification, Blocklist, Metadata, Media Management & Naming config, Update, Log.

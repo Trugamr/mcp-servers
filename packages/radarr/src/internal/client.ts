@@ -2,7 +2,12 @@ import { Context, type Effect, Layer } from "effect"
 import { decodeConfig, type RadarrConfig, type RadarrConfigInput } from "./config.js"
 import type { RadarrError } from "./errors.js"
 import * as movie from "./movie.js"
+import * as queue from "./queue.js"
+import * as release from "./release.js"
+import type { ReleaseGrab } from "./release.js"
 import type { Movie } from "./schemas/movie.js"
+import type { QueuePage } from "./schemas/queue.js"
+import type { Release } from "./schemas/release.js"
 import type { SystemStatus } from "./schemas/system-status.js"
 import { getStatus } from "./system.js"
 
@@ -14,6 +19,13 @@ export interface RadarrV3Api {
   readonly movie: {
     readonly list: Effect.Effect<ReadonlyArray<Movie>, RadarrError>
     readonly get: (id: number) => Effect.Effect<Movie, RadarrError>
+  }
+  readonly release: {
+    readonly search: (movieId: number) => Effect.Effect<ReadonlyArray<Release>, RadarrError>
+    readonly grab: (body: ReleaseGrab) => Effect.Effect<void, RadarrError>
+  }
+  readonly queue: {
+    readonly list: Effect.Effect<QueuePage, RadarrError>
   }
 }
 
@@ -33,6 +45,13 @@ const makeV3 = (config: RadarrConfig): RadarrV3Api => ({
   movie: {
     list: movie.list(config),
     get: (id) => movie.get(config, id),
+  },
+  release: {
+    search: (movieId) => release.search(config, movieId),
+    grab: (body) => release.grab(config, body),
+  },
+  queue: {
+    list: queue.list(config),
   },
 })
 

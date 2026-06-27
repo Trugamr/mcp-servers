@@ -7,7 +7,7 @@ import { RadarrDecodeError, RadarrRequestError, RadarrResponseError } from "./er
  * typed `RadarrError` channel. Resource modules import `getJson`/`sendJson`/`del`
  * from here.
  */
-export const { getJson, sendJson, del } = makeHttp({
+export const { getJson, sendJson, sendJsonVoid, del } = makeHttp({
   request: (cause) => new RadarrRequestError({ cause }),
   response: (status, cause) => new RadarrResponseError({ status, cause }),
   decode: (cause) => new RadarrDecodeError({ cause }),
