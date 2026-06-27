@@ -11,6 +11,7 @@ import {
   Tag,
 } from "@trugamr/sonarr/effect"
 import { Tool, Toolkit } from "@effect/ai"
+import { isPast, parseISO } from "date-fns"
 import { Context, Effect, Encoding, Order, Predicate, Schema } from "effect"
 
 /** Tool-call failure shape returned to the model when a Sonarr call fails. */
@@ -286,16 +287,16 @@ const EpisodeSummary = Episode.pick(
 )
 type EpisodeSummary = Schema.Schema.Type<typeof EpisodeSummary>
 
-const toEpisodeSummary = (e: Episode): EpisodeSummary => ({
-  id: e.id,
-  seriesId: e.seriesId,
-  seasonNumber: e.seasonNumber,
-  episodeNumber: e.episodeNumber,
-  hasFile: e.hasFile,
-  monitored: e.monitored,
-  ...(Predicate.isNotUndefined(e.title) && { title: e.title }),
-  ...(Predicate.isNotUndefined(e.airDate) && { airDate: e.airDate }),
-  ...(Predicate.isNotUndefined(e.overview) && { overview: e.overview }),
+const toEpisodeSummary = (episode: Episode): EpisodeSummary => ({
+  id: episode.id,
+  seriesId: episode.seriesId,
+  seasonNumber: episode.seasonNumber,
+  episodeNumber: episode.episodeNumber,
+  hasFile: episode.hasFile,
+  monitored: episode.monitored,
+  ...(Predicate.isNotUndefined(episode.title) && { title: episode.title }),
+  ...(Predicate.isNotUndefined(episode.airDate) && { airDate: episode.airDate }),
+  ...(Predicate.isNotUndefined(episode.overview) && { overview: episode.overview }),
 })
 
 const EpisodeFilter = Schema.Struct({
@@ -330,22 +331,22 @@ const EpisodeSort = Schema.Array(
 )
 type EpisodeSortValue = Schema.Schema.Type<typeof EpisodeSort>
 
-const episodeAired = (e: Episode) =>
-  Predicate.isNotNullable(e.airDateUtc) && Date.parse(e.airDateUtc) <= Date.now()
+const episodeAired = (episode: Episode) =>
+  Predicate.isNotNullable(episode.airDateUtc) && isPast(parseISO(episode.airDateUtc))
 
 // `series.id`/`season.number` scope the Sonarr fetch, so they're applied
 // server-side, not here — this narrows the fetched episodes by the remaining fields.
-const matchesEpisode = (e: Episode, f: EpisodeFilterValue) =>
-  matchText(e.title, f.title) &&
-  matchBoolean(e.monitored, f.monitored) &&
-  matchBoolean(e.hasFile, f.hasFile) &&
-  (Predicate.isUndefined(f.missing) || f.missing === (e.monitored && !e.hasFile)) &&
-  matchOrdered(e.airDateUtc, f.airDate) &&
-  (Predicate.isUndefined(f.hasAired) || f.hasAired === episodeAired(e))
+const matchesEpisode = (episode: Episode, f: EpisodeFilterValue) =>
+  matchText(episode.title, f.title) &&
+  matchBoolean(episode.monitored, f.monitored) &&
+  matchBoolean(episode.hasFile, f.hasFile) &&
+  (Predicate.isUndefined(f.missing) || f.missing === (episode.monitored && !episode.hasFile)) &&
+  matchOrdered(episode.airDateUtc, f.airDate) &&
+  (Predicate.isUndefined(f.hasAired) || f.hasAired === episodeAired(episode))
 
 const byEpisodeNumber: Order.Order<Episode> = Order.combine(
-  Order.mapInput(Order.number, (e: Episode) => e.seasonNumber),
-  Order.mapInput(Order.number, (e: Episode) => e.episodeNumber),
+  Order.mapInput(Order.number, (episode: Episode) => episode.seasonNumber),
+  Order.mapInput(Order.number, (episode: Episode) => episode.episodeNumber),
 )
 // Sort by UTC air date, nulls last regardless of direction.
 const byAirDate =
@@ -484,13 +485,13 @@ const handle = <A>(effect: Effect.Effect<A, SonarrError>) =>
 const handleList = <A>(effect: Effect.Effect<ReadonlyArray<A>, SonarrError>) =>
   handle(effect).pipe(Effect.map((items) => ({ items })))
 
-export interface SeriesListArgs {
+export interface SeriesListArguments {
   readonly filter?: SeriesFilterValue | undefined
   readonly sort?: SeriesSortValue | undefined
   readonly page?: PageInputValue | undefined
 }
 
-export interface EpisodeListArgs {
+export interface EpisodeListArguments {
   readonly filter: EpisodeFilterValue
   readonly sort?: EpisodeSortValue | undefined
   readonly page?: PageInputValue | undefined
@@ -498,7 +499,7 @@ export interface EpisodeListArgs {
 
 export const getSystemStatus = (sonarr: SonarrService) => handle(sonarr.system.getStatus)
 
-export const listSeries = (sonarr: SonarrService, p: SeriesListArgs = {}) =>
+export const listSeries = (sonarr: SonarrService, p: SeriesListArguments = {}) =>
   decodeCursor(p.page?.cursor).pipe(
     Effect.flatMap((offset) =>
       handle(sonarr.series.list).pipe(
@@ -514,7 +515,7 @@ export const listSeries = (sonarr: SonarrService, p: SeriesListArgs = {}) =>
 export const getSeries = (sonarr: SonarrService, seriesId: number) =>
   handle(sonarr.series.get(seriesId))
 
-export const listEpisodes = (sonarr: SonarrService, p: EpisodeListArgs) =>
+export const listEpisodes = (sonarr: SonarrService, p: EpisodeListArguments) =>
   decodeCursor(p.page?.cursor).pipe(
     Effect.flatMap((offset) =>
       handle(
@@ -524,7 +525,7 @@ export const listEpisodes = (sonarr: SonarrService, p: EpisodeListArgs) =>
         }),
       ).pipe(
         Effect.map((all) => {
-          const filtered = all.filter((e) => matchesEpisode(e, p.filter))
+          const filtered = all.filter((episode) => matchesEpisode(episode, p.filter))
           const sorted = filtered.toSorted(episodeOrder(p.sort))
           return pageByCursor(sorted, offset, p.page?.size, toEpisodeSummary)
         }),
@@ -550,9 +551,9 @@ export const SonarrToolkitLive = SonarrToolkit.toLayer(
     const sonarr = yield* Sonarr
     return {
       get_system_status: () => getSystemStatus(sonarr),
-      list_series: (params) => listSeries(sonarr, params),
+      list_series: (parameters) => listSeries(sonarr, parameters),
       get_series: ({ seriesId }) => getSeries(sonarr, seriesId),
-      list_episodes: (params) => listEpisodes(sonarr, params),
+      list_episodes: (parameters) => listEpisodes(sonarr, parameters),
       list_quality_profiles: () => listQualityProfiles(sonarr),
       list_tags: () => listTags(sonarr),
       create_tag: ({ label }) => createTag(sonarr, label),

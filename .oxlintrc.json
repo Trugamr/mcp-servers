@@ -1,12 +1,17 @@
 {
   "plugins": ["typescript", "unicorn"],
+  "jsPlugins": [{ "name": "unicorn-js", "specifier": "eslint-plugin-unicorn" }],
   "categories": {
     "correctness": "error",
     "suspicious": "warn"
   },
   "rules": {
     "curly": ["error", "all"],
-    "no-underscore-dangle": ["warn", { "allow": ["_tag"] }]
+    "no-underscore-dangle": ["warn", { "allow": ["_tag"] }],
+    "unicorn-js/name-replacements": [
+      "error",
+      { "checkFilenames": false, "allowList": { "pkg": true } }
+    ]
   },
   "ignorePatterns": ["**/dist/**", "**/coverage/**"]
 }

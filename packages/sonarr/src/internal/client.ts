@@ -29,7 +29,7 @@ export interface SonarrV3Api {
   }
   readonly episode: {
     readonly list: (
-      params: episode.EpisodeListParams,
+      parameters: episode.EpisodeListParameters,
     ) => Effect.Effect<ReadonlyArray<Episode>, SonarrError>
   }
   readonly qualityProfile: {
@@ -71,7 +71,7 @@ const makeV3 = (config: SonarrConfig): SonarrV3Api => ({
     get: (id) => series.get(config, id),
   },
   episode: {
-    list: (params) => episode.list(config, params),
+    list: (parameters) => episode.list(config, parameters),
   },
   qualityProfile: {
     list: qualityProfile.list(config),
