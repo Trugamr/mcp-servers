@@ -22,6 +22,12 @@ const ToolError = Schema.Struct({
 })
 
 /**
+ * Success schema for a list tool. MCP structured content must be a JSON object,
+ * never a bare array, so list results are wrapped as `{ items }`.
+ */
+const ListResult = <A, I>(item: Schema.Schema<A, I>) => Schema.Struct({ items: Schema.Array(item) })
+
+/**
  * Surface a typed `SonarrError` as a JSON-serializable tool error. The message
  * is owned by the error itself, so this stays tag-agnostic as error types grow.
  */
@@ -48,7 +54,7 @@ const GetSystemStatus = Tool.make("get_system_status", {
 
 const ListSeries = Tool.make("list_series", {
   description: "List all series in the Sonarr library.",
-  success: Schema.Array(Series),
+  success: ListResult(Series),
   failure: ToolError,
 }).annotateContext(readonlyHints)
 
@@ -62,19 +68,19 @@ const GetSeries = Tool.make("get_series", {
 const ListEpisodes = Tool.make("list_episodes", {
   description: "List episodes for a series, optionally filtered to a single season.",
   parameters: { seriesId: Schema.Number, seasonNumber: Schema.optional(Schema.Number) },
-  success: Schema.Array(Episode),
+  success: ListResult(Episode),
   failure: ToolError,
 }).annotateContext(readonlyHints)
 
 const ListQualityProfiles = Tool.make("list_quality_profiles", {
   description: "List Sonarr quality profiles.",
-  success: Schema.Array(QualityProfile),
+  success: ListResult(QualityProfile),
   failure: ToolError,
 }).annotateContext(readonlyHints)
 
 const ListRootFolders = Tool.make("list_root_folders", {
   description: "List configured root folders and their free space.",
-  success: Schema.Array(RootFolder),
+  success: ListResult(RootFolder),
   failure: ToolError,
 }).annotateContext(readonlyHints)
 
@@ -94,7 +100,7 @@ const DeleteRootFolder = Tool.make("delete_root_folder", {
 
 const ListTags = Tool.make("list_tags", {
   description: "List Sonarr tags.",
-  success: Schema.Array(Tag),
+  success: ListResult(Tag),
   failure: ToolError,
 }).annotateContext(readonlyHints)
 
@@ -114,13 +120,13 @@ const DeleteTag = Tool.make("delete_tag", {
 
 const ListHealth = Tool.make("list_health", {
   description: "List active Sonarr health-check messages.",
-  success: Schema.Array(Health),
+  success: ListResult(Health),
   failure: ToolError,
 }).annotateContext(readonlyHints)
 
 const ListDiskSpace = Tool.make("list_disk_space", {
   description: "List free and total disk space for Sonarr-visible mounts.",
-  success: Schema.Array(DiskSpace),
+  success: ListResult(DiskSpace),
   failure: ToolError,
 }).annotateContext(readonlyHints)
 
@@ -147,19 +153,26 @@ export const SonarrToolkit = Toolkit.make(
 const handle = <A>(effect: Effect.Effect<A, SonarrError>) =>
   effect.pipe(Effect.mapError(toToolError))
 
+/**
+ * Run a Sonarr list operation, wrapping the array as `{ items }` so the tool's
+ * structured output is a JSON object — MCP rejects a bare array there.
+ */
+const handleList = <A>(effect: Effect.Effect<ReadonlyArray<A>, SonarrError>) =>
+  handle(effect).pipe(Effect.map((items) => ({ items })))
+
 export const getSystemStatus = (sonarr: SonarrService) => handle(sonarr.system.getStatus)
 
-export const listSeries = (sonarr: SonarrService) => handle(sonarr.series.list)
+export const listSeries = (sonarr: SonarrService) => handleList(sonarr.series.list)
 
 export const getSeries = (sonarr: SonarrService, seriesId: number) =>
   handle(sonarr.series.get(seriesId))
 
 export const listEpisodes = (sonarr: SonarrService, params: EpisodeListParams) =>
-  handle(sonarr.episode.list(params))
+  handleList(sonarr.episode.list(params))
 
-export const listQualityProfiles = (sonarr: SonarrService) => handle(sonarr.qualityProfile.list)
+export const listQualityProfiles = (sonarr: SonarrService) => handleList(sonarr.qualityProfile.list)
 
-export const listRootFolders = (sonarr: SonarrService) => handle(sonarr.rootFolder.list)
+export const listRootFolders = (sonarr: SonarrService) => handleList(sonarr.rootFolder.list)
 
 export const addRootFolder = (sonarr: SonarrService, path: string) =>
   handle(sonarr.rootFolder.add(path))
@@ -167,15 +180,15 @@ export const addRootFolder = (sonarr: SonarrService, path: string) =>
 export const deleteRootFolder = (sonarr: SonarrService, id: number) =>
   handle(sonarr.rootFolder.delete(id))
 
-export const listTags = (sonarr: SonarrService) => handle(sonarr.tag.list)
+export const listTags = (sonarr: SonarrService) => handleList(sonarr.tag.list)
 
 export const createTag = (sonarr: SonarrService, label: string) => handle(sonarr.tag.create(label))
 
 export const deleteTag = (sonarr: SonarrService, id: number) => handle(sonarr.tag.delete(id))
 
-export const listHealth = (sonarr: SonarrService) => handle(sonarr.health.list)
+export const listHealth = (sonarr: SonarrService) => handleList(sonarr.health.list)
 
-export const listDiskSpace = (sonarr: SonarrService) => handle(sonarr.diskSpace.list)
+export const listDiskSpace = (sonarr: SonarrService) => handleList(sonarr.diskSpace.list)
 
 /** Toolkit handlers, reading the Sonarr client from context. */
 export const SonarrToolkitLive = SonarrToolkit.toLayer(

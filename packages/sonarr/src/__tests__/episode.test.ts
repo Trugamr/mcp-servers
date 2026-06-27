@@ -1,9 +1,9 @@
 import { http, HttpResponse } from "msw"
 import { describe, expect, it } from "vitest"
 import { episodeFixture } from "./fixtures/episode.js"
-import { baseUrl, runExit, setupMockServer, successOf } from "./helpers.js"
+import { apiUrl, runExit, setupMockServer, successOf } from "./helpers.js"
 
-const episodeUrl = `${baseUrl}/api/v3/episode`
+const episodeUrl = apiUrl("/episode")
 const server = setupMockServer()
 
 describe("Sonarr service — episode.list", () => {

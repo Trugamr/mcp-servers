@@ -2,9 +2,9 @@ import { http, HttpResponse } from "msw"
 import { describe, expect, it } from "vitest"
 import { SonarrResponseError } from "../effect.js"
 import { seriesFixture } from "./fixtures/series.js"
-import { baseUrl, failureOf, runExit, setupMockServer, successOf } from "./helpers.js"
+import { apiUrl, failureOf, runExit, setupMockServer, successOf } from "./helpers.js"
 
-const seriesUrl = `${baseUrl}/api/v3/series`
+const seriesUrl = apiUrl("/series")
 const server = setupMockServer()
 
 describe("Sonarr service — series", () => {

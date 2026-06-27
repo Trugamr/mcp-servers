@@ -1,34 +1,27 @@
 import { Effect } from "effect"
 import { http, HttpResponse } from "msw"
 import { describe, expect, it } from "vitest"
-import {
-  Sonarr,
-  SonarrDecodeError,
-  SonarrRequestError,
-  SonarrResponseError,
-  type SonarrConfigInput,
-} from "../effect.js"
+import { Sonarr, SonarrDecodeError, SonarrRequestError, SonarrResponseError } from "../effect.js"
 import { systemStatusFixture } from "./fixtures/system-status.js"
-import { apiKey, baseUrl, failureOf, setupMockServer, successOf } from "./helpers.js"
+import {
+  apiKey,
+  apiUrl,
+  baseUrl,
+  failureOf,
+  runExit,
+  setupMockServer,
+  successOf,
+} from "./helpers.js"
 
-const statusUrl = `${baseUrl}/api/v3/system/status`
+const statusUrl = apiUrl("/system/status")
 
 const server = setupMockServer()
-
-// Resolve `system.getStatus` against a given config to an Exit, so each test can
-// assert on the success value or read the typed error straight from the failure
-// channel.
-const runStatus = (config: SonarrConfigInput = { baseUrl, apiKey }) =>
-  Effect.flatMap(Sonarr, (sonarr) => sonarr.system.getStatus).pipe(
-    Effect.provide(Sonarr.layer(config)),
-    Effect.runPromiseExit,
-  )
 
 describe("Sonarr service — system.getStatus", () => {
   it("decodes a valid status response", async () => {
     server.use(http.get(statusUrl, () => HttpResponse.json(systemStatusFixture)))
 
-    const status = successOf(await runStatus())
+    const status = successOf(await runExit((sonarr) => sonarr.system.getStatus))
 
     expect(status.appName).toBe("Sonarr")
     expect(status.version).toBe(systemStatusFixture.version)
@@ -43,7 +36,7 @@ describe("Sonarr service — system.getStatus", () => {
       }),
     )
 
-    successOf(await runStatus())
+    successOf(await runExit((sonarr) => sonarr.system.getStatus))
 
     expect(received).toBe(apiKey)
   })
@@ -55,7 +48,9 @@ describe("Sonarr service — system.getStatus", () => {
     // proves `decodeConfig`'s normalization is wired into the request.
     server.use(http.get(statusUrl, () => HttpResponse.json(systemStatusFixture)))
 
-    const status = successOf(await runStatus({ baseUrl: `${baseUrl}/`, apiKey }))
+    const status = successOf(
+      await runExit((sonarr) => sonarr.system.getStatus, { baseUrl: `${baseUrl}/`, apiKey }),
+    )
 
     expect(status.appName).toBe("Sonarr")
   })
@@ -63,7 +58,7 @@ describe("Sonarr service — system.getStatus", () => {
   it("fails with a typed SonarrResponseError carrying the status code on a 401", async () => {
     server.use(http.get(statusUrl, () => new HttpResponse(null, { status: 401 })))
 
-    const error = failureOf(await runStatus())
+    const error = failureOf(await runExit((sonarr) => sonarr.system.getStatus))
 
     expect(error).toBeInstanceOf(SonarrResponseError)
     if (error instanceof SonarrResponseError) {
@@ -74,7 +69,7 @@ describe("Sonarr service — system.getStatus", () => {
   it("fails with a typed SonarrRequestError when Sonarr is unreachable", async () => {
     server.use(http.get(statusUrl, () => HttpResponse.error()))
 
-    const error = failureOf(await runStatus())
+    const error = failureOf(await runExit((sonarr) => sonarr.system.getStatus))
 
     expect(error).toBeInstanceOf(SonarrRequestError)
   })
@@ -82,8 +77,25 @@ describe("Sonarr service — system.getStatus", () => {
   it("fails with a typed SonarrDecodeError on a malformed body", async () => {
     server.use(http.get(statusUrl, () => HttpResponse.json({ nope: true })))
 
-    const error = failureOf(await runStatus())
+    const error = failureOf(await runExit((sonarr) => sonarr.system.getStatus))
 
     expect(error).toBeInstanceOf(SonarrDecodeError)
+  })
+
+  it("exposes operations under an explicit .v3 namespace that aliases the latest", async () => {
+    server.use(http.get(statusUrl, () => HttpResponse.json(systemStatusFixture)))
+
+    const status = successOf(await runExit((sonarr) => sonarr.v3.system.getStatus))
+    expect(status.version).toBe(systemStatusFixture.version)
+
+    // The flat surface mirrors the latest version (v3 today) — same operation refs,
+    // so pinning `.v3` and using the flat alias hit the same endpoint.
+    const aliased = await Effect.runPromise(
+      Sonarr.pipe(
+        Effect.map((sonarr) => sonarr.system.getStatus === sonarr.v3.system.getStatus),
+        Effect.provide(Sonarr.layer({ baseUrl, apiKey })),
+      ),
+    )
+    expect(aliased).toBe(true)
   })
 })

@@ -1,20 +1,28 @@
 import { Cause, Effect, Exit, Option } from "effect"
 import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll } from "vitest"
-import { Sonarr, type SonarrService } from "../effect.js"
+import { Sonarr, type SonarrConfigInput, type SonarrService } from "../effect.js"
+import { apiBase } from "../internal/version.js"
 
 export const baseUrl = "http://sonarr.test"
 export const apiKey = "test-api-key"
 
-/** A Sonarr client pointed at the mocked instance, shared across the SDK tests. */
-export const TestSonarr = Sonarr.layer({ baseUrl, apiKey })
+/**
+ * Absolute URL for a v3 API path on the mocked instance, e.g. `apiUrl("/tag")`.
+ * Reuses the SDK's own `apiBase`, so a mocked URL can't drift from the real prefix.
+ */
+export const apiUrl = (path: string): string => `${baseUrl}${apiBase}${path}`
 
 /**
- * Resolve a client operation against `TestSonarr` to an Exit, so each test can
- * assert on the success value or read the typed error from the failure channel.
+ * Resolve a client operation to an Exit, so each test can assert on the success
+ * value or read the typed error from the failure channel. Defaults to the mocked
+ * instance; pass `config` to drive a differently-configured client (e.g. a baseUrl
+ * variant).
  */
-export const runExit = <A, E>(build: (sonarr: SonarrService) => Effect.Effect<A, E>) =>
-  Effect.flatMap(Sonarr, build).pipe(Effect.provide(TestSonarr), Effect.runPromiseExit)
+export const runExit = <A, E>(
+  build: (sonarr: SonarrService) => Effect.Effect<A, E>,
+  config: SonarrConfigInput = { baseUrl, apiKey },
+) => Effect.flatMap(Sonarr, build).pipe(Effect.provide(Sonarr.layer(config)), Effect.runPromiseExit)
 
 /** Pull the success value out of an Exit, failing loudly with the cause otherwise. */
 export const successOf = <A, E>(exit: Exit.Exit<A, E>): A => {

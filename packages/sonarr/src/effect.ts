@@ -6,7 +6,7 @@
  * Promise surface layered over this one later.
  */
 export { Sonarr } from "./internal/client.js"
-export type { SonarrService } from "./internal/client.js"
+export type { SonarrService, SonarrV3Api } from "./internal/client.js"
 export type { SonarrConfigInput } from "./internal/config.js"
 export type { EpisodeListParams } from "./internal/episode.js"
 export { DiskSpace } from "./internal/schemas/disk-space.js"

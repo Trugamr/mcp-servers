@@ -18,8 +18,8 @@ import * as series from "./series.js"
 import { getStatus } from "./system.js"
 import * as tag from "./tag.js"
 
-/** The Sonarr client surface for Effect consumers — operations grouped by resource. */
-export interface SonarrService {
+/** The Sonarr v3 API surface — operations grouped by resource. */
+export interface SonarrV3Api {
   readonly system: {
     readonly getStatus: Effect.Effect<SystemStatus, SonarrError>
   }
@@ -53,7 +53,16 @@ export interface SonarrService {
   }
 }
 
-const make = (config: SonarrConfig): SonarrService => ({
+/**
+ * The Sonarr client for Effect consumers. The flat members mirror the latest API
+ * version (v3 today) — the surface the MCP server rides; each version is also
+ * pinnable by name (`.v3`), so a future version is additive, not a breaking move.
+ */
+export interface SonarrService extends SonarrV3Api {
+  readonly v3: SonarrV3Api
+}
+
+const makeV3 = (config: SonarrConfig): SonarrV3Api => ({
   system: {
     getStatus: getStatus(config),
   },
@@ -84,6 +93,12 @@ const make = (config: SonarrConfig): SonarrService => ({
     list: diskSpace.list(config),
   },
 })
+
+const make = (config: SonarrConfig): SonarrService => {
+  const v3 = makeV3(config)
+  const latest = v3 // the one place "latest" is defined; the flat members mirror it
+  return { ...latest, v3 }
+}
 
 /**
  * The Sonarr client as an Effect service. Provide `Sonarr.layer(config)` once,

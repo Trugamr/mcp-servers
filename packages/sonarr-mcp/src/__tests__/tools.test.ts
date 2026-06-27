@@ -1,9 +1,16 @@
 import { Sonarr, type SonarrService } from "@trugamr/sonarr/effect"
-import { Cause, Effect, Exit, Option } from "effect"
+import { Cause, Effect, Exit, Option, Schema, SchemaAST } from "effect"
 import { http, HttpResponse } from "msw"
 import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
-import { createTag, getSeries, getSystemStatus, listEpisodes, listSeries } from "../tools.js"
+import {
+  createTag,
+  getSeries,
+  getSystemStatus,
+  listEpisodes,
+  listSeries,
+  SonarrToolkit,
+} from "../tools.js"
 import { episodeFixture } from "./fixtures/episode.js"
 import { seriesFixture } from "./fixtures/series.js"
 import { systemStatusFixture } from "./fixtures/system-status.js"
@@ -11,7 +18,9 @@ import { tagFixture } from "./fixtures/tag.js"
 
 const baseUrl = "http://sonarr.test"
 const apiKey = "test-api-key"
-const statusUrl = `${baseUrl}/api/v3/system/status`
+/** Absolute URL for a v3 API path on the mocked instance, e.g. `apiUrl("/series")`. */
+const apiUrl = (path: string) => `${baseUrl}/api/v3${path}`
+const statusUrl = apiUrl("/system/status")
 const TestSonarr = Sonarr.layer({ baseUrl, apiKey })
 
 const server = setupServer()
@@ -51,15 +60,15 @@ describe("get_system_status tool handler", () => {
 
 describe("library tool handlers", () => {
   it("list_series returns the decoded series", async () => {
-    server.use(http.get(`${baseUrl}/api/v3/series`, () => HttpResponse.json([seriesFixture])))
+    server.use(http.get(apiUrl("/series"), () => HttpResponse.json([seriesFixture])))
 
-    const series = await Effect.runPromise(run(listSeries))
+    const { items } = await Effect.runPromise(run(listSeries))
 
-    expect(series[0]?.title).toBe(seriesFixture.title)
+    expect(items[0]?.title).toBe(seriesFixture.title)
   })
 
   it("get_series interpolates the id into the request path", async () => {
-    server.use(http.get(`${baseUrl}/api/v3/series/5`, () => HttpResponse.json(seriesFixture)))
+    server.use(http.get(apiUrl("/series/5"), () => HttpResponse.json(seriesFixture)))
 
     const series = await Effect.runPromise(run((sonarr) => getSeries(sonarr, 5)))
 
@@ -69,7 +78,7 @@ describe("library tool handlers", () => {
   it("list_episodes forwards seriesId and seasonNumber as query params", async () => {
     let url: URL | undefined
     server.use(
-      http.get(`${baseUrl}/api/v3/episode`, ({ request }) => {
+      http.get(apiUrl("/episode"), ({ request }) => {
         url = new URL(request.url)
         return HttpResponse.json([episodeFixture])
       }),
@@ -82,7 +91,7 @@ describe("library tool handlers", () => {
   })
 
   it("create_tag posts the label and returns the created tag", async () => {
-    server.use(http.post(`${baseUrl}/api/v3/tag`, () => HttpResponse.json(tagFixture)))
+    server.use(http.post(apiUrl("/tag"), () => HttpResponse.json(tagFixture)))
 
     const tag = await Effect.runPromise(run((sonarr) => createTag(sonarr, "anime")))
 
@@ -90,7 +99,7 @@ describe("library tool handlers", () => {
   })
 
   it("maps a SonarrError into the tool-error shape (401 on list_series)", async () => {
-    server.use(http.get(`${baseUrl}/api/v3/series`, () => new HttpResponse(null, { status: 401 })))
+    server.use(http.get(apiUrl("/series"), () => new HttpResponse(null, { status: 401 })))
 
     const exit = await Effect.runPromiseExit(run(listSeries))
 
@@ -100,5 +109,34 @@ describe("library tool handlers", () => {
       _tag: "SonarrResponseError",
       message: "Sonarr returned HTTP 401",
     })
+  })
+})
+
+// MCP requires a tool result's `structuredContent` to be a JSON object, and
+// @effect/ai drops the *encoded* success value straight into that field. So a
+// tool's success schema must encode to an object — a struct (`TypeLiteral`) — or
+// to void, which @effect/ai omits. The encoded AST is what matters: a schema with
+// nullable fields is a `Transformation` until encoded. A bare array (`TupleType`)
+// is the shape clients reject with `expected: "record"`.
+const objectShapedSuccess = ["TypeLiteral", "VoidKeyword"]
+
+describe("tool success schemas are MCP-valid structured content", () => {
+  for (const tool of Object.values(SonarrToolkit.tools)) {
+    it(`${tool.name} encodes to an object (or void)`, () => {
+      const encoded = SchemaAST.encodedAST(tool.successSchema.ast)
+      expect(objectShapedSuccess.includes(encoded._tag)).toBe(true)
+    })
+  }
+})
+
+describe("structured content round-trip", () => {
+  it("list_series encodes to a JSON object, not a bare array", async () => {
+    server.use(http.get(apiUrl("/series"), () => HttpResponse.json([seriesFixture])))
+
+    const result = await Effect.runPromise(run(listSeries))
+    const encoded = Schema.encodeSync(SonarrToolkit.tools.list_series.successSchema)(result)
+
+    expect(typeof encoded).toBe("object")
+    expect(Array.isArray(encoded)).toBe(false)
   })
 })
