@@ -5,6 +5,7 @@ import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import {
   createTag,
+  deleteTag,
   getSeries,
   getSystemStatus,
   listEpisodes,
@@ -387,15 +388,16 @@ describe("list_episodes query surface", () => {
 
 // MCP requires a tool result's `structuredContent` to be a JSON object, and
 // @effect/ai drops the *encoded* success value straight into that field. So a
-// tool's success schema must encode to an object — a struct (`TypeLiteral`) — or
-// to void, which @effect/ai omits. The encoded AST is what matters: a schema with
-// nullable fields is a `Transformation` until encoded. A bare array (`TupleType`)
-// is the shape clients reject with `expected: "record"`.
-const objectShapedSuccess = ["TypeLiteral", "VoidKeyword"]
+// tool's success schema must encode to a struct (`TypeLiteral`). Void is not an
+// option: it encodes to no text content, which the transport rejects — the reason
+// deletes echo `{ id }`. The encoded AST is what matters: a schema with nullable
+// fields is a `Transformation` until encoded, and a bare array (`TupleType`) is the
+// shape clients reject with `expected: "record"`.
+const objectShapedSuccess = ["TypeLiteral"]
 
 describe("tool success schemas are MCP-valid structured content", () => {
   for (const tool of Object.values(SonarrToolkit.tools)) {
-    it(`${tool.name} encodes to an object (or void)`, () => {
+    it(`${tool.name} encodes to an object`, () => {
       const encoded = SchemaAST.encodedAST(tool.successSchema.ast)
       expect(objectShapedSuccess.includes(encoded._tag)).toBe(true)
     })
@@ -411,5 +413,16 @@ describe("structured content round-trip", () => {
 
     expect(typeof encoded).toBe("object")
     expect(Array.isArray(encoded)).toBe(false)
+  })
+})
+
+// A void success can't be represented as MCP tool content, so deletes echo the id.
+describe("delete tool handlers", () => {
+  it("delete_tag echoes the deleted id", async () => {
+    server.use(http.delete(apiUrl("/tag/5"), () => new HttpResponse(null, { status: 200 })))
+
+    const result = await Effect.runPromise(run((sonarr) => deleteTag(sonarr, 5)))
+
+    expect(result).toEqual({ id: 5 })
   })
 })
