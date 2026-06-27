@@ -183,9 +183,11 @@ const pageByCursor = <A, B>(
   }
 }
 
-// Lean list projection. The heavy `seasons[]`/`statistics`/`ratings` blocks are
-// dropped; full detail is available through `get_series`. Derived from the SDK
-// `Series` so field types track the source schema.
+// Lean list projection. Only the unbounded `seasons[]` block (per-season
+// statistics, which grows with the library) is dropped; full detail is available
+// through `get_series`. The fixed-size `statistics`/`ratings` blocks are kept —
+// small and high-signal (completeness and quality). Derived from the SDK `Series`
+// so field types track the source schema.
 const SeriesSummary = Series.pick(
   "id",
   "title",
@@ -197,6 +199,8 @@ const SeriesSummary = Series.pick(
   "network",
   "seriesType",
   "path",
+  "statistics",
+  "ratings",
 )
 type SeriesSummary = Schema.Schema.Type<typeof SeriesSummary>
 
@@ -211,6 +215,8 @@ const toSeriesSummary = (s: Series): SeriesSummary => ({
   seriesType: s.seriesType,
   ...(Predicate.isNotUndefined(s.network) && { network: s.network }),
   ...(Predicate.isNotUndefined(s.path) && { path: s.path }),
+  ...(Predicate.isNotUndefined(s.statistics) && { statistics: s.statistics }),
+  ...(Predicate.isNotUndefined(s.ratings) && { ratings: s.ratings }),
 })
 
 const seriesOrders: Record<"title" | "year" | "added", Order.Order<Series>> = {
@@ -380,8 +386,8 @@ const GetSystemStatus = Tool.make("get_system_status", {
 
 const ListSeries = Tool.make("list_series", {
   description:
-    "List series as lean summaries; filter, sort, and paginate (opaque cursor). " +
-    "Call get_series for full detail (seasons, statistics, ratings).",
+    "List series as lean summaries (including statistics and ratings); filter, sort, " +
+    "and paginate (opaque cursor). Call get_series for the full per-season breakdown (seasons[]).",
   parameters: {
     filter: Schema.optional(SeriesFilter),
     sort: Schema.optional(SeriesSort),

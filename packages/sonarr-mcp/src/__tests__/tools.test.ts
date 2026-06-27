@@ -253,14 +253,31 @@ describe("list_series query surface", () => {
     expect(def.items.map((i) => i.title)).toEqual(["Alpha", "Bravo", "Charlie"])
   })
 
-  it("projects lean summaries, dropping the heavy blocks", async () => {
+  it("projects lean summaries: keeps statistics/ratings, drops seasons", async () => {
     const def = await Effect.runPromise(run((s) => listSeries(s)))
-    const first = def.items[0]
-    expect(first?.title).toBeDefined()
-    expect(first).not.toHaveProperty("seasons")
-    expect(first).not.toHaveProperty("statistics")
-    expect(first).not.toHaveProperty("ratings")
-    expect(first).not.toHaveProperty("overview")
+    // Default title-ascending order: [Alpha, Bravo, Charlie]; only Charlie has stats.
+    const [alpha, , charlie] = def.items
+
+    // The unbounded seasons[] block and overview are always dropped.
+    for (const item of def.items) {
+      expect(item).not.toHaveProperty("seasons")
+      expect(item).not.toHaveProperty("overview")
+    }
+
+    // The fixed-size statistics/ratings are kept when the source has them.
+    expect(charlie?.statistics).toEqual({
+      seasonCount: 3,
+      episodeFileCount: 10,
+      episodeCount: 12,
+      totalEpisodeCount: 12,
+      sizeOnDisk: 1000,
+      percentOfEpisodes: 83,
+    })
+    expect(charlie?.ratings).toEqual({ votes: 100, value: 8.5 })
+
+    // And omitted (not emitted as undefined) when the source lacks them.
+    expect(alpha).not.toHaveProperty("statistics")
+    expect(alpha).not.toHaveProperty("ratings")
   })
 
   it("returns an empty page when nothing matches", async () => {
