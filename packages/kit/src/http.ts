@@ -134,6 +134,28 @@ export const makeHttp = <RequestError, ResponseError, DecodeError>(
     )
 
   /**
+   * POST/PUT a JSON `body` when the instance returns no body to decode (e.g. Radarr's
+   * release grab, which 201s empty). A non-2xx status still fails through the typed
+   * error contract; the empty 2xx body is ignored rather than parsed.
+   */
+  const sendJsonVoid = (
+    config: ServarrRequestConfig,
+    method: "post" | "put",
+    path: string,
+    body: unknown,
+    options?: RequestOptions,
+  ): Effect.Effect<void, Error, HttpClient.HttpClient> =>
+    request(
+      (client) =>
+        client[method](`${config.baseUrl}${path}`, {
+          headers: apiKeyHeader(config),
+          urlParams: options?.urlParams,
+          body: HttpBody.unsafeJson(body),
+        }),
+      () => Effect.void,
+    )
+
+  /**
    * DELETE a resource. Servarr returns an empty body on success, so nothing is
    * decoded; a non-2xx status still fails through the typed error contract.
    */
@@ -151,7 +173,7 @@ export const makeHttp = <RequestError, ResponseError, DecodeError>(
       () => Effect.void,
     )
 
-  return { getJson, sendJson, del } as const
+  return { getJson, sendJson, sendJsonVoid, del } as const
 }
 
 /**

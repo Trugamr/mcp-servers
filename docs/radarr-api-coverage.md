@@ -2,23 +2,25 @@
 
 Tracks how much of the [Radarr v3 API](https://radarr.video/docs/api/) (spec: [`openapi.json`](https://github.com/Radarr/Radarr/blob/develop/src/Radarr.Api.V3/openapi.json)) the `@trugamr/radarr` SDK exposes. Organized by **resource section** — each section lists its reads _and_ writes together; we work through sections, not a global reads-then-writes split.
 
-The Radarr MCP server isn't built yet, so shipped rows note their SDK method only. When the MCP server lands it will mirror `@trugamr/sonarr-mcp`, and these rows will gain their `→ tool` mapping.
+The `@trugamr/radarr-mcp` server exposes a thin slice of these as agent tools over stdio and Streamable HTTP, mirroring `@trugamr/sonarr-mcp`'s scaffolding. Shipped rows note their SDK method and, where one exists, the `→ tool` that calls it.
 
 Legend: `[x]` shipped · `[ ]` planned. Paths omit the `/api/v3` prefix (Radarr's API is v3, the same major as Sonarr's, distinct from the app version).
 
 ## List query conventions
 
-`/movie` returns a flat array with no server-side query support, so when the MCP server lands, filtering, sorting, and paging will happen in the MCP layer — the same structured, client-side query `@trugamr/sonarr-mcp` uses for `list_series` (per-field `filter` operators, multi-field `sort`, opaque cursor `page` with a `{ items, nextCursor?, totalRecords }` envelope).
+`/movie`, `/release`, and `/queue` return flat lists with no server-side query support, so the `@trugamr/radarr-mcp` list tools apply filtering, sorting, and paging **client-side** after the fetch — the same structured query `@trugamr/sonarr-mcp` uses for `list_series`: per-field `filter` operators (`eq`/`ne`/`in`/`gte`/`contains`/…), multi-field `sort`, and an opaque-cursor `page`, with a `{ items, nextCursor?, totalRecords }` envelope. The SDK methods stay thin (just the endpoint + its native params, as Sonarr's SDK exposes them); the query richness lives in the MCP layer.
+
+Codec (HEVC/x265) is the one field with no structured home — Radarr puts it only in a release's `title` — so `search_releases` filters it via `filter.title.contains` (resolution comes from `filter.resolution`).
 
 ## System
 
-- [x] `GET /system/status` — `system.getStatus`
+- [x] `GET /system/status` — `system.getStatus` → `get_system_status`
 - [ ] `GET /system/backup`, `POST /system/backup`, `DELETE /system/backup/{id}`
 - [ ] `POST /system/restart`, `POST /system/shutdown`
 
 ## Movie
 
-- [x] `GET /movie` — `movie.list`
+- [x] `GET /movie` — `movie.list` → `list_movies`
 - [x] `GET /movie/{id}` — `movie.get`
 - [ ] `POST /movie` — add a movie (needs **Movie Lookup**)
 - [ ] `PUT /movie/{id}` — update a movie (full-resource round-trip)
@@ -69,9 +71,18 @@ The `Movie` schema models a lean identify-and-reason-about field set; `Schema.St
 
 - [ ] `GET /calendar?start=&end=` — upcoming/released movies in a date range
 
+## Release
+
+Interactive search hits the configured indexers live for a movie **already in the library**, then a grab hands the chosen release to the download client (where it surfaces in the queue). Codec (HEVC/x265) isn't a structured field — it lives only in a release's `title`, so a caller filtering for e.g. "1080p hevc" reads `quality` for the resolution and the title string for the codec.
+
+- [x] `GET /release?movieId=` — interactive search for a movie's releases — `release.search` → `search_releases`
+- [x] `POST /release` — grab a release (`guid` + `indexerId`) and send it to the download client — `release.grab` → `grab_release`
+- [ ] `POST /release/push` — push a release Radarr didn't find itself
+
 ## Queue
 
-- [ ] `GET /queue` — paginated download queue
+- [x] `GET /queue` — download queue, page one — `queue.list` → `list_queue`
+- [ ] `GET /queue` — full paging (`page`, `pageSize`, `sortKey`)
 - [ ] `DELETE /queue/{id}` — remove a queue item
 - [ ] `GET /queue/details`, `GET /queue/status`
 
@@ -92,4 +103,4 @@ The `Movie` schema models a lean identify-and-reason-about field set; `Schema.St
 
 ## Other resources (not yet started)
 
-Collection, Credit, Custom Format, Quality Definition, Indexer, Download Client, Import List, Notification, Release / Release Push, Blocklist, Metadata, Media Management & Naming config, Update, Log.
+Collection, Credit, Custom Format, Quality Definition, Indexer, Download Client, Import List, Notification, Blocklist, Metadata, Media Management & Naming config, Update, Log.
