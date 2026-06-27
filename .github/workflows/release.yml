@@ -54,6 +54,9 @@ jobs:
         with:
           version: pnpm version-packages # applies changesets -> the "Version Packages" PR
           publish: pnpm release # `changeset tag` once that PR merges (git tags only — no npm yet)
+          # Conventional-commit title/message so the squash-merge lands as `chore: …` on main.
+          title: "chore: version packages"
+          commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
