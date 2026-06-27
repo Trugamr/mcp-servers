@@ -66,20 +66,21 @@ jobs:
 
       - name: Build the image matrix (one entry per MCP server)
         id: matrix
+        uses: actions/github-script@v7
         env:
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
-        run: |
-          # `publishedPackages` is what this run published ([{name, version}, ...]), empty on a
-          # non-release push. Build one matrix entry per MCP: its just-published version, or "" for
-          # an edge build when it wasn't part of this release. The scoped npm name is the short name
-          # under @trugamr, so one list drives both.
-          matrix="$(jq -cn --argjson published "${PUBLISHED:-[]}" '
-            ($published | map({key: .name, value: .version}) | from_entries) as $version
-            | ["sonarr-mcp", "radarr-mcp"]
-            | map({ package: ., version: ($version["@trugamr/" + .] // "") })
-            | { include: . }
-          ')"
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+        with:
+          script: |
+            // `publishedPackages` is what this run published ([{ name, version }, ...]); it's
+            // empty on a non-release push. Emit one entry per MCP: the version this run published
+            // for it, or "" for an edge build when it wasn't part of this release. The scoped npm
+            // name is the short name under @trugamr, so one list drives both.
+            const published = JSON.parse(process.env.PUBLISHED || "[]")
+            const include = ["sonarr-mcp", "radarr-mcp"].map((pkg) => ({
+              package: pkg,
+              version: published.find((p) => p.name === `@trugamr/${pkg}`)?.version ?? "",
+            }))
+            core.setOutput("matrix", JSON.stringify({ include }))
 
   # Publish each MCP image on every push: the released version when that MCP was just released,
   # otherwise an empty version for a moving `edge` build. The matrix fans out one reusable-workflow
