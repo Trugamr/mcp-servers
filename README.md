@@ -29,7 +29,7 @@ pnpm build
 Two suites:
 
 - **Unit (`pnpm test`)** — the default. Every Sonarr HTTP call is mocked with `msw`; fast and needs nothing external.
-- **Integration (`pnpm test:integration`)** — drives the SDK against a **real, throwaway Sonarr**. A Vitest global setup boots a Sonarr container via Testcontainers, so the only requirement is a running **Docker** daemon. The same command runs locally and in CI (a dedicated `integration` job).
+- **Integration (`pnpm test:integration`)** — drives the SDK against a **real, throwaway Sonarr**. A Vitest global setup boots a Sonarr container via Testcontainers, so it needs a running **Docker** daemon — plus **network access** to Sonarr's metadata service, since the series/episode tests seed a real show so those reads decode populated payloads instead of empty arrays. The same command runs locally and in CI (a dedicated `integration` job).
 
 To run integration tests against an instance you already have — skipping the container — set both env vars:
 

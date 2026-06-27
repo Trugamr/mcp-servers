@@ -1,6 +1,7 @@
 import { GenericContainer, Wait } from "testcontainers"
 import type { TestProject } from "vitest/node"
 import { SONARR_IMAGE } from "./pinned.js"
+import { SERIES_ROOT_FOLDER, SPARE_ROOT_FOLDER } from "./seed.js"
 
 // Values the global setup resolves once and hands to every integration test.
 declare module "vitest" {
@@ -32,6 +33,8 @@ export default async function setup({ provide }: TestProject) {
 
   const container = await new GenericContainer(IMAGE)
     .withEnvironment({ SONARR__AUTH__APIKEY: API_KEY })
+    // Writable root-folder paths so the seed/root-folder tests don't need a real disk.
+    .withTmpFs({ [SERIES_ROOT_FOLDER]: "rw", [SPARE_ROOT_FOLDER]: "rw" })
     .withExposedPorts(SONARR_PORT)
     .withWaitStrategy(Wait.forHttp("/ping", SONARR_PORT).forStatusCode(200))
     .withStartupTimeout(120_000)
