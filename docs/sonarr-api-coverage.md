@@ -10,6 +10,23 @@ split.
 Legend: `[x]` shipped · `[ ]` planned. Each shipped row notes its SDK method →
 MCP tool. Paths omit the `/api/v3` prefix.
 
+## List query conventions
+
+`list_series` and `list_episodes` take a structured, client-side query — Sonarr's
+`/series` and `/episode` return flat arrays with no server-side query support, so
+filtering, sorting, and paging happen in the MCP layer:
+
+- **filter** — a per-field object with explicit operators: `eq`/`ne`/`in`/`nin`,
+  `gte`/`lte`/`gt`/`lt` (ordered fields), `contains` (text), `hasAny`/`hasAll`
+  (array membership). e.g. `{ filter: { status: { in: ["ended"] }, year: { gte: 2015 } } }`.
+- **sort** — `[{ field, order }]`; `order` is `asc` (default) or `desc`, multi-field.
+- **include** (`list_series` only) — re-adds heavy blocks (`statistics` / `seasons` /
+  `ratings`) to the otherwise-lean summary item; full detail is always via `get_series`.
+- **page** — opaque cursor pagination: `{ size?, cursor? }` in; the result envelope is
+  `{ items, nextCursor?, totalRecords }` (`nextCursor` absent on the last page,
+  `totalRecords` is the filtered count). The same envelope will back the future
+  server-paginated Queue / History / Wanted tools.
+
 ## System
 
 - [x] `GET /system/status` — `system.getStatus` → `get_system_status`
@@ -28,7 +45,7 @@ MCP tool. Paths omit the `/api/v3` prefix.
 ## Episode
 
 - [x] `GET /episode?seriesId=&seasonNumber=` — `episode.list` → `list_episodes`
-- [ ] `GET /episode/{id}` — get a single episode
+- [ ] `GET /episode/{id}` — get a single episode (a `get_episode` detail tool; would let `list_episodes` drop `overview`)
 - [ ] `PUT /episode/monitor` — bulk monitor/unmonitor episodes
 
 ## Episode File
@@ -46,9 +63,12 @@ MCP tool. Paths omit the `/api/v3` prefix.
 
 ## Root Folder
 
-- [x] `GET /rootfolder` — `rootFolder.list` → `list_root_folders`
-- [x] `POST /rootfolder` — `rootFolder.add` → `add_root_folder`
-- [x] `DELETE /rootfolder/{id}` — `rootFolder.delete` → `delete_root_folder`
+The SDK keeps these ops, but no MCP tool is exposed — root folder management
+isn't a priority for the agent surface right now.
+
+- [x] `GET /rootfolder` — `rootFolder.list` (SDK only)
+- [x] `POST /rootfolder` — `rootFolder.add` (SDK only)
+- [x] `DELETE /rootfolder/{id}` — `rootFolder.delete` (SDK only)
 
 ## Tag
 
