@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { optionalNullable } from "./optional.js"
+import { optionalNullable } from "@trugamr/kit"
 
 /**
  * `GET /api/v3/episode?seriesId=`. Lean episode view; `Schema.Struct` drops

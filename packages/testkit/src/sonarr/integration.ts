@@ -1,6 +1,6 @@
-import { GenericContainer, Wait } from "testcontainers"
 import { inject } from "vitest"
 import type { TestProject } from "vitest/node"
+import { startServarrContainer } from "../servarr/container.js"
 import { SONARR_IMAGE } from "./pinned.js"
 
 // Values the global setup resolves once and hands to every integration test. Kept
@@ -44,23 +44,18 @@ export const createSonarrGlobalSetup =
       return
     }
 
-    const container = await new GenericContainer(IMAGE)
-      .withEnvironment({ SONARR__AUTH__APIKEY: API_KEY })
-      .withTmpFs(options.tmpfs ?? {})
-      .withExposedPorts(SONARR_PORT)
-      .withWaitStrategy(Wait.forHttp("/ping", SONARR_PORT).forStatusCode(200))
-      .withStartupTimeout(120_000)
-      .start()
+    const started = await startServarrContainer({
+      image: IMAGE,
+      port: SONARR_PORT,
+      apiKeyEnvVar: "SONARR__AUTH__APIKEY",
+      apiKey: API_KEY,
+      tmpfs: options.tmpfs,
+    })
 
-    provide(
-      "sonarrBaseUrl",
-      `http://${container.getHost()}:${container.getMappedPort(SONARR_PORT)}`,
-    )
-    provide("sonarrApiKey", API_KEY)
+    provide("sonarrBaseUrl", started.baseUrl)
+    provide("sonarrApiKey", started.apiKey)
 
-    return async () => {
-      await container.stop()
-    }
+    return started.stop
   }
 
 /** The live Sonarr the global setup resolved — booted container or escape-hatch instance. */

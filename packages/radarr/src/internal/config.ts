@@ -1,7 +1,7 @@
 import { ApiKey, BaseUrl } from "@trugamr/kit"
 import { Schema } from "effect"
 
-export const SonarrConfig = Schema.Struct({
+export const RadarrConfig = Schema.Struct({
   // Absolute http(s); trailing slashes stripped during decode so joined request
   // paths never double up. See `@trugamr/kit`.
   baseUrl: BaseUrl,
@@ -11,9 +11,9 @@ export const SonarrConfig = Schema.Struct({
   apiKey: ApiKey,
 })
 
-export type SonarrConfig = Schema.Schema.Type<typeof SonarrConfig>
-export type SonarrConfigInput = Schema.Schema.Encoded<typeof SonarrConfig>
+export type RadarrConfig = Schema.Schema.Type<typeof RadarrConfig>
+export type RadarrConfigInput = Schema.Schema.Encoded<typeof RadarrConfig>
 
 /** Validate raw config; `baseUrl` normalization happens in the schema. */
-export const decodeConfig: (input: SonarrConfigInput) => SonarrConfig =
-  Schema.decodeUnknownSync(SonarrConfig)
+export const decodeConfig: (input: RadarrConfigInput) => RadarrConfig =
+  Schema.decodeUnknownSync(RadarrConfig)

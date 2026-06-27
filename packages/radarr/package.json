@@ -1,7 +1,7 @@
 {
-  "name": "@trugamr/sonarr",
+  "name": "@trugamr/radarr",
   "version": "0.0.0",
-  "description": "Typed, Effect-native Sonarr SDK.",
+  "description": "Typed, Effect-native Radarr SDK.",
   "files": [
     "dist"
   ],

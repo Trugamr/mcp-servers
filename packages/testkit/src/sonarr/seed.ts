@@ -1,3 +1,4 @@
+import { type ServarrApi, servarrApi } from "../servarr/api.js"
 import { injectSonarr } from "./integration.js"
 
 // Writable root-folder paths a seeding suite mounts as tmpfs (via the global
@@ -9,23 +10,6 @@ export const SPARE_ROOT_FOLDER = "/data/extra"
 // status) is stable to assert against.
 const SERIES_TVDB_ID = 306304
 const SERIES_TITLE = "A Series of Unfortunate Events"
-
-/** Drive Sonarr's API directly with the injected credentials, throwing on non-2xx. */
-const sonarr = async (path: string, init?: RequestInit): Promise<Response> => {
-  const { baseUrl, apiKey } = injectSonarr()
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      "X-Api-Key": apiKey,
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-  })
-  if (!response.ok) {
-    throw new Error(`${init?.method ?? "GET"} ${path} → HTTP ${response.status}`)
-  }
-  return response
-}
 
 export interface SeededSeries {
   readonly id: number
@@ -41,35 +25,33 @@ export interface SeededSeries {
  * Sonarr's online metadata provider. Requires network access to that provider.
  */
 export const seedSeries = async (): Promise<SeededSeries> => {
-  const folders = (await (await sonarr("/api/v3/rootfolder")).json()) as Array<{ path?: string }>
+  const sonarr = servarrApi(injectSonarr())
+
+  const folders: Array<{ path?: string }> = await sonarr.readJson("/api/v3/rootfolder")
   if (!folders.some((folder) => folder.path === SERIES_ROOT_FOLDER)) {
-    await sonarr("/api/v3/rootfolder", {
+    await sonarr.send("/api/v3/rootfolder", {
       method: "POST",
       body: JSON.stringify({ path: SERIES_ROOT_FOLDER }),
     })
   }
 
-  const added = (await (
-    await sonarr("/api/v3/series", {
-      method: "POST",
-      body: JSON.stringify({
-        tvdbId: SERIES_TVDB_ID,
-        title: SERIES_TITLE,
-        qualityProfileId: 1,
-        rootFolderPath: SERIES_ROOT_FOLDER,
-        monitored: true,
-        addOptions: { searchForMissingEpisodes: false, searchForCutoffUnmetEpisodes: false },
-      }),
-    })
-  ).json()) as { id: number }
+  const added: { id: number } = await sonarr.readJson("/api/v3/series", {
+    method: "POST",
+    body: JSON.stringify({
+      tvdbId: SERIES_TVDB_ID,
+      title: SERIES_TITLE,
+      qualityProfileId: 1,
+      rootFolderPath: SERIES_ROOT_FOLDER,
+      monitored: true,
+      addOptions: { searchForMissingEpisodes: false, searchForCutoffUnmetEpisodes: false },
+    }),
+  })
 
-  const refresh = (await (
-    await sonarr("/api/v3/command", {
-      method: "POST",
-      body: JSON.stringify({ name: "RefreshSeries", seriesId: added.id }),
-    })
-  ).json()) as SonarrCommand
-  await waitForCommand(refresh.id)
+  const refresh: SonarrCommand = await sonarr.readJson("/api/v3/command", {
+    method: "POST",
+    body: JSON.stringify({ name: "RefreshSeries", seriesId: added.id }),
+  })
+  await waitForCommand(sonarr, refresh.id)
 
   return { id: added.id, tvdbId: SERIES_TVDB_ID, title: SERIES_TITLE }
 }
@@ -84,9 +66,9 @@ interface SonarrCommand {
  * (rather than for episodes to appear) means the seed is done exactly when Sonarr
  * says the refresh finished, and a failed refresh surfaces immediately.
  */
-const waitForCommand = async (commandId: number): Promise<void> => {
+const waitForCommand = async (sonarr: ServarrApi, commandId: number): Promise<void> => {
   for (let attempt = 0; attempt < 60; attempt++) {
-    const command = (await (await sonarr(`/api/v3/command/${commandId}`)).json()) as SonarrCommand
+    const command: SonarrCommand = await sonarr.readJson(`/api/v3/command/${commandId}`)
     if (command.status === "completed") {
       return
     }

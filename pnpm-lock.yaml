@@ -51,11 +51,39 @@ importers:
         specifier: 4.1.9
         version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(msw@2.14.6(@types/node@24.13.2)(typescript@6.0.3))(vite@8.1.0(@types/node@24.13.2)(yaml@2.9.0))
 
+  packages/kit:
+    dependencies:
+      '@effect/platform':
+        specifier: 0.96.2
+        version: 0.96.2(effect@3.21.4)
+      effect:
+        specifier: 3.21.4
+        version: 3.21.4
+
+  packages/radarr:
+    dependencies:
+      '@effect/platform':
+        specifier: 0.96.2
+        version: 0.96.2(effect@3.21.4)
+      '@trugamr/kit':
+        specifier: workspace:*
+        version: link:../kit
+      effect:
+        specifier: 3.21.4
+        version: 3.21.4
+    devDependencies:
+      '@trugamr/testkit':
+        specifier: workspace:*
+        version: link:../testkit
+
   packages/sonarr:
     dependencies:
       '@effect/platform':
         specifier: 0.96.2
         version: 0.96.2(effect@3.21.4)
+      '@trugamr/kit':
+        specifier: workspace:*
+        version: link:../kit
       effect:
         specifier: 3.21.4
         version: 3.21.4

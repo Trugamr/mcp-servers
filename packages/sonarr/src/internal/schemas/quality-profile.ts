@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { optionalNullable } from "./optional.js"
+import { optionalNullable } from "@trugamr/kit"
 
 const Quality = Schema.Struct({
   id: Schema.Number,
