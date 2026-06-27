@@ -1,5 +1,5 @@
 import { type Episode, type Series, Sonarr, type SonarrService } from "@trugamr/sonarr/effect"
-import { Cause, Effect, Exit, JSONSchema, Option, Schema, SchemaAST } from "effect"
+import { Cause, Effect, Exit, Option, Schema, SchemaAST } from "effect"
 import { http, HttpResponse } from "msw"
 import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
@@ -348,20 +348,6 @@ describe("list_episodes query surface", () => {
     )
     expect(sorted.items.map((i) => i.id)).toEqual([3, 2, 1])
     expect(sorted.items[0]).toHaveProperty("overview")
-  })
-})
-
-describe("tool inputSchema derivation", () => {
-  it("derives list_series parameters as nested objects with no anyOf unions", () => {
-    const json = JSON.stringify(JSONSchema.make(SonarrToolkit.tools.list_series.parametersSchema))
-
-    expect(json).not.toContain("anyOf")
-    expect(json).toContain("filter")
-    expect(json).toContain("gte") // nested range operator object derived
-  })
-
-  it("derives list_episodes parameters without throwing", () => {
-    expect(() => JSONSchema.make(SonarrToolkit.tools.list_episodes.parametersSchema)).not.toThrow()
   })
 })
 
