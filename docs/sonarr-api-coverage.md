@@ -17,8 +17,8 @@ MCP tool. Paths omit the `/api/v3` prefix.
 filtering, sorting, and paging happen in the MCP layer:
 
 - **filter** — a per-field object with explicit operators: `eq`/`ne`/`in`/`nin`,
-  `gte`/`lte`/`gt`/`lt` (ordered fields), `contains` (text), `hasAny`/`hasAll`
-  (array membership). e.g. `{ filter: { status: { in: ["ended"] }, year: { gte: 2015 } } }`.
+  `gte`/`lte`/`gt`/`lt` (ordered fields), `contains` (text).
+  e.g. `{ filter: { status: { in: ["ended"] }, year: { gte: 2015 } } }`.
 - **sort** — `[{ field, order }]`; `order` is `asc` (default) or `desc`, multi-field.
 - **page** — opaque cursor pagination: `{ size?, cursor? }` in; the result envelope is
   `{ items, nextCursor?, totalRecords }` (`nextCursor` absent on the last page,

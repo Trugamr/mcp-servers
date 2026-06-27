@@ -85,12 +85,6 @@ const Text = Schema.Struct({
 })
 /** Boolean operator. */
 const Bool = Schema.Struct({ eq: Schema.optional(Schema.Boolean) })
-/** Array-membership operators, for fields like `tags[]` / `genres[]`. */
-const Has = <A, I>(s: Schema.Schema<A, I>) =>
-  Schema.Struct({
-    hasAny: Schema.optional(Schema.Array(s)),
-    hasAll: Schema.optional(Schema.Array(s)),
-  })
 
 // Operator-object value types mirror what `Schema.optional` produces — each
 // property is optional *and* may be `undefined` (the repo runs with
@@ -112,10 +106,6 @@ type TextOp = {
   readonly ne?: string | undefined
   readonly contains?: string | undefined
   readonly in?: ReadonlyArray<string> | undefined
-}
-type HasOp<T> = {
-  readonly hasAny?: ReadonlyArray<T> | undefined
-  readonly hasAll?: ReadonlyArray<T> | undefined
 }
 
 // Each matcher returns true when the value satisfies every present operator (an
@@ -148,10 +138,6 @@ const matchText = (v: string | null | undefined, f?: TextOp) => {
 }
 const matchBool = (v: boolean, f?: { readonly eq?: boolean | undefined }) =>
   !f || f.eq === undefined || v === f.eq
-const matchHas = <T>(vals: ReadonlyArray<T>, f?: HasOp<T>) =>
-  !f ||
-  ((f.hasAny === undefined || f.hasAny.some((x) => vals.includes(x))) &&
-    (f.hasAll === undefined || f.hasAll.every((x) => vals.includes(x))))
 
 const clamp = (n: number, lo: number, hi: number) =>
   Math.min(Math.max(Math.trunc(Number.isFinite(n) ? n : lo), lo), hi)
@@ -289,11 +275,9 @@ const SeriesFilter = Schema.Struct({
   qualityProfileId: Schema.optional(
     Eq(Schema.Number).annotations({ description: "Quality profile id." }),
   ),
-  tag: Schema.optional(Has(Schema.Number).annotations({ description: "Tag ids on the series." })),
   network: Schema.optional(
     Text.annotations({ description: "Match the network (text operators)." }),
   ),
-  genre: Schema.optional(Has(Schema.String).annotations({ description: "Genres on the series." })),
   year: Schema.optional(
     Ord(Schema.Number).annotations({ description: "Release year (range ops)." }),
   ),
@@ -313,9 +297,7 @@ const matchesSeries = (s: Series, f: SeriesFilterValue = {}) =>
   matchEq(s.seriesType, f.seriesType) &&
   matchBool(s.monitored, f.monitored) &&
   matchEq(s.qualityProfileId, f.qualityProfileId) &&
-  matchHas(s.tags, f.tag) &&
   matchText(s.network, f.network) &&
-  matchHas(s.genres ?? [], f.genre) &&
   matchOrd(s.year, f.year)
 
 const seriesComparator = (sort: SeriesSortValue = []) =>

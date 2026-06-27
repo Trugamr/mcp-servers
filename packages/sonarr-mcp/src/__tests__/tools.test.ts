@@ -238,20 +238,6 @@ describe("list_series query surface", () => {
     ).toEqual([1, 3])
   })
 
-  it("filters on fields dropped from the summary (tag, genre)", async () => {
-    mockSeries(library)
-
-    const tagged = await Effect.runPromise(
-      run((s) => listSeries(s, { filter: { tag: { hasAny: [7] } } })),
-    )
-    expect(tagged.items.map((i) => i.id)).toEqual([3])
-
-    const drama = await Effect.runPromise(
-      run((s) => listSeries(s, { filter: { genre: { hasAll: ["Drama", "Crime"] } } })),
-    )
-    expect(drama.items.map((i) => i.id)).toEqual([1])
-  })
-
   it("sorts by multiple fields and defaults to title ascending", async () => {
     mockSeries(library)
 
@@ -376,7 +362,6 @@ describe("tool inputSchema derivation", () => {
 
     expect(json).not.toContain("anyOf")
     expect(json).toContain("filter")
-    expect(json).toContain("hasAny") // nested array-membership operator object derived
     expect(json).toContain("gte") // nested range operator object derived
   })
 
