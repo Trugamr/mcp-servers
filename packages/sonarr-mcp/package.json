@@ -1,6 +1,6 @@
 {
   "name": "@trugamr/sonarr-mcp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "MCP server exposing the Sonarr SDK to AI agents as tools (stdio + HTTP).",
   "keywords": [
     "ai",
