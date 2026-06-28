@@ -1,6 +1,6 @@
 {
   "name": "@trugamr/radarr-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server exposing the Radarr SDK to AI agents as tools (stdio + HTTP).",
   "keywords": [
     "ai",
