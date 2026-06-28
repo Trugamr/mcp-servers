@@ -56,7 +56,7 @@ const MAX_PAGE_SIZE = 100
 const SortOrder = Schema.Literal("asc", "desc")
 
 /** Equality + set membership operators over a value type. */
-const Eq = <A, I>(s: Schema.Schema<A, I>) =>
+const EqualityOperators = <A, I>(s: Schema.Schema<A, I>) =>
   Schema.Struct({
     eq: Schema.optional(s),
     ne: Schema.optional(s),
@@ -64,7 +64,7 @@ const Eq = <A, I>(s: Schema.Schema<A, I>) =>
     nin: Schema.optional(Schema.Array(s)),
   })
 /** Ordered operators = equality/set + range comparisons (numbers, ISO-date strings). */
-const Ord = <A, I>(s: Schema.Schema<A, I>) =>
+const OrderedOperators = <A, I>(s: Schema.Schema<A, I>) =>
   Schema.Struct({
     eq: Schema.optional(s),
     ne: Schema.optional(s),
@@ -75,26 +75,27 @@ const Ord = <A, I>(s: Schema.Schema<A, I>) =>
     gt: Schema.optional(s),
     lt: Schema.optional(s),
   })
-/** Text operators. `contains` is a case-insensitive substring match. */
-const Text = Schema.Struct({
+/** Operators for a text field. `contains` is a case-insensitive substring match. */
+const TextOperators = Schema.Struct({
   eq: Schema.optional(Schema.String),
   ne: Schema.optional(Schema.String),
   contains: Schema.optional(Schema.String),
   in: Schema.optional(Schema.Array(Schema.String)),
+  nin: Schema.optional(Schema.Array(Schema.String)),
 })
 /** Boolean operator. */
-const Bool = Schema.Struct({ eq: Schema.optional(Schema.Boolean) })
+const BooleanOperator = Schema.Struct({ eq: Schema.optional(Schema.Boolean) })
 
 // Operator-object value types are derived from the schema builders, so the matchers
 // can't drift from the schemas they validate against.
-type EqOp<A> = Schema.Schema.Type<ReturnType<typeof Eq<A, A>>>
-type OrdOp<A> = Schema.Schema.Type<ReturnType<typeof Ord<A, A>>>
-type TextOp = Schema.Schema.Type<typeof Text>
-type BoolOp = Schema.Schema.Type<typeof Bool>
+type EqualityOperatorsValue<A> = Schema.Schema.Type<ReturnType<typeof EqualityOperators<A, A>>>
+type OrderedOperatorsValue<A> = Schema.Schema.Type<ReturnType<typeof OrderedOperators<A, A>>>
+export type TextOperatorsValue = Schema.Schema.Type<typeof TextOperators>
+type BooleanOperatorValue = Schema.Schema.Type<typeof BooleanOperator>
 
 // Each matcher returns true when the value satisfies every present operator (an
 // absent operator is a no-op), so a missing filter short-circuits to `true`.
-const matchEquality = <T>(value: T, operators?: EqOp<T>) =>
+const matchEquality = <T>(value: T, operators?: EqualityOperatorsValue<T>) =>
   !operators ||
   ((Predicate.isUndefined(operators.eq) || value === operators.eq) &&
     (Predicate.isUndefined(operators.ne) || value !== operators.ne) &&
@@ -103,7 +104,7 @@ const matchEquality = <T>(value: T, operators?: EqOp<T>) =>
 // A null/absent value fails any present ordered constraint.
 const matchOrdered = <T extends string | number>(
   value: T | null | undefined,
-  operators?: OrdOp<T>,
+  operators?: OrderedOperatorsValue<T>,
 ) =>
   !operators ||
   (Predicate.isNotNullable(value) &&
@@ -112,7 +113,7 @@ const matchOrdered = <T extends string | number>(
     (Predicate.isUndefined(operators.lte) || value <= operators.lte) &&
     (Predicate.isUndefined(operators.gt) || value > operators.gt) &&
     (Predicate.isUndefined(operators.lt) || value < operators.lt))
-const matchText = (value: string | null | undefined, operators?: TextOp) => {
+const matchText = (value: string | null | undefined, operators?: TextOperatorsValue) => {
   const text = value ?? ""
   return (
     !operators ||
@@ -120,10 +121,33 @@ const matchText = (value: string | null | undefined, operators?: TextOp) => {
       (Predicate.isUndefined(operators.ne) || text !== operators.ne) &&
       (Predicate.isUndefined(operators.contains) ||
         text.toLowerCase().includes(operators.contains.toLowerCase())) &&
-      (Predicate.isUndefined(operators.in) || operators.in.includes(text)))
+      (Predicate.isUndefined(operators.in) || operators.in.includes(text)) &&
+      (Predicate.isUndefined(operators.nin) || !operators.nin.includes(text)))
   )
 }
-const matchBoolean = (value: boolean, operators?: BoolOp) =>
+// Apply text operators to a multi-valued field (e.g. genres) with set semantics:
+// positive operators are existential (some value satisfies them), negatives are
+// universal (no value violates them). An empty/absent field satisfies only the
+// negative operators — it isn't excluded by `ne`/`nin`.
+const matchTextArray = (
+  field: ReadonlyArray<string> | undefined,
+  operators?: TextOperatorsValue,
+) => {
+  const values = field ?? []
+  const containsLower = operators?.contains?.toLowerCase()
+  return (
+    !operators ||
+    ((Predicate.isUndefined(operators.eq) || values.includes(operators.eq)) &&
+      (Predicate.isUndefined(operators.ne) || !values.includes(operators.ne)) &&
+      (Predicate.isUndefined(containsLower) ||
+        values.some((value) => value.toLowerCase().includes(containsLower))) &&
+      (Predicate.isUndefined(operators.in) ||
+        operators.in.some((value) => values.includes(value))) &&
+      (Predicate.isUndefined(operators.nin) ||
+        !operators.nin.some((value) => values.includes(value))))
+  )
+}
+const matchBoolean = (value: boolean, operators?: BooleanOperatorValue) =>
   !operators || Predicate.isUndefined(operators.eq) || value === operators.eq
 
 const clamp = (n: number, lo: number, hi: number) =>
@@ -185,7 +209,7 @@ const pageByCursor = <A, B>(
 // ---- movie ----------------------------------------------------------------
 
 // Lean list projection: drop the heavy/low-signal fields (overview, sortTitle,
-// titleSlug, certification, genres, tags, runtime, …) and keep what identifies and
+// titleSlug, certification, tags, runtime, …) and keep what identifies and
 // ranks a movie. Derived from the SDK `Movie` so field types track the source.
 const MovieSummary = Movie.pick(
   "id",
@@ -197,6 +221,7 @@ const MovieSummary = Movie.pick(
   "qualityProfileId",
   "hasFile",
   "studio",
+  "genres",
   "path",
   "sizeOnDisk",
 )
@@ -212,6 +237,7 @@ const toMovieSummary = (m: Movie): MovieSummary => ({
   qualityProfileId: m.qualityProfileId,
   hasFile: m.hasFile,
   ...(Predicate.isNotUndefined(m.studio) && { studio: m.studio }),
+  ...(Predicate.isNotUndefined(m.genres) && { genres: m.genres }),
   ...(Predicate.isNotUndefined(m.path) && { path: m.path }),
   ...(Predicate.isNotUndefined(m.sizeOnDisk) && { sizeOnDisk: m.sizeOnDisk }),
 })
@@ -224,19 +250,33 @@ const movieOrders: Record<"title" | "year" | "added", Order.Order<Movie>> = {
 
 const MovieFilter = Schema.Struct({
   title: Schema.optional(
-    Text.annotations({ description: "Match the movie title (text operators)." }),
+    TextOperators.annotations({ description: "Match the movie title (text operators)." }),
   ),
   status: Schema.optional(
-    Eq(Schema.String).annotations({ description: "announced | inCinemas | released | deleted" }),
+    EqualityOperators(Schema.String).annotations({
+      description: "announced | inCinemas | released | deleted",
+    }),
   ),
-  monitored: Schema.optional(Bool.annotations({ description: "Whether the movie is monitored." })),
-  hasFile: Schema.optional(Bool.annotations({ description: "Whether a movie file is present." })),
+  monitored: Schema.optional(
+    BooleanOperator.annotations({ description: "Whether the movie is monitored." }),
+  ),
+  hasFile: Schema.optional(
+    BooleanOperator.annotations({ description: "Whether a movie file is present." }),
+  ),
   qualityProfileId: Schema.optional(
-    Eq(Schema.Number).annotations({ description: "Quality profile id." }),
+    EqualityOperators(Schema.Number).annotations({ description: "Quality profile id." }),
   ),
-  studio: Schema.optional(Text.annotations({ description: "Match the studio (text operators)." })),
+  studio: Schema.optional(
+    TextOperators.annotations({ description: "Match the studio (text operators)." }),
+  ),
+  genres: Schema.optional(
+    TextOperators.annotations({
+      description:
+        "Match genres (set semantics), e.g. contains 'drama', in ['Drama'], nin ['Anime'].",
+    }),
+  ),
   year: Schema.optional(
-    Ord(Schema.Number).annotations({ description: "Release year (range ops)." }),
+    OrderedOperators(Schema.Number).annotations({ description: "Release year (range ops)." }),
   ),
 })
 type MovieFilterValue = Schema.Schema.Type<typeof MovieFilter>
@@ -255,6 +295,7 @@ const matchesMovie = (m: Movie, f: MovieFilterValue = {}) =>
   matchBoolean(m.hasFile, f.hasFile) &&
   matchEquality(m.qualityProfileId, f.qualityProfileId) &&
   matchText(m.studio, f.studio) &&
+  matchTextArray(m.genres, f.genres) &&
   matchOrdered(m.year, f.year)
 
 const movieOrder = (sort: MovieSortValue = []) =>
@@ -285,37 +326,47 @@ const releaseOrders: Record<
 
 const ReleaseFilter = Schema.Struct({
   title: Schema.optional(
-    Text.annotations({
+    TextOperators.annotations({
       description: "Match the release title — codec lives here, e.g. contains 'hevc' or 'x265'.",
     }),
   ),
-  protocol: Schema.optional(Eq(Schema.String).annotations({ description: "torrent | usenet" })),
+  protocol: Schema.optional(
+    EqualityOperators(Schema.String).annotations({ description: "torrent | usenet" }),
+  ),
   resolution: Schema.optional(
-    Ord(Schema.Number).annotations({ description: "Vertical resolution, e.g. 1080 (range ops)." }),
+    OrderedOperators(Schema.Number).annotations({
+      description: "Vertical resolution, e.g. 1080 (range ops).",
+    }),
   ),
   quality: Schema.optional(
-    Text.annotations({
+    TextOperators.annotations({
       description: "Match the quality name, e.g. 'Bluray-1080p' (text operators).",
     }),
   ),
   indexer: Schema.optional(
-    Text.annotations({ description: "Match the indexer name (text operators)." }),
+    TextOperators.annotations({ description: "Match the indexer name (text operators)." }),
   ),
   releaseGroup: Schema.optional(
-    Text.annotations({ description: "Match the release group (text operators)." }),
+    TextOperators.annotations({ description: "Match the release group (text operators)." }),
   ),
   seeders: Schema.optional(
-    Ord(Schema.Number).annotations({ description: "Torrent seeders (range ops)." }),
+    OrderedOperators(Schema.Number).annotations({ description: "Torrent seeders (range ops)." }),
   ),
   size: Schema.optional(
-    Ord(Schema.Number).annotations({ description: "Size in bytes (range ops)." }),
+    OrderedOperators(Schema.Number).annotations({ description: "Size in bytes (range ops)." }),
   ),
-  age: Schema.optional(Ord(Schema.Number).annotations({ description: "Age in days (range ops)." })),
+  age: Schema.optional(
+    OrderedOperators(Schema.Number).annotations({ description: "Age in days (range ops)." }),
+  ),
   customFormatScore: Schema.optional(
-    Ord(Schema.Number).annotations({ description: "Custom-format score (range ops)." }),
+    OrderedOperators(Schema.Number).annotations({
+      description: "Custom-format score (range ops).",
+    }),
   ),
   approved: Schema.optional(
-    Bool.annotations({ description: "Whether Radarr approved the release (passed its filters)." }),
+    BooleanOperator.annotations({
+      description: "Whether Radarr approved the release (passed its filters).",
+    }),
   ),
 })
 type ReleaseFilterValue = Schema.Schema.Type<typeof ReleaseFilter>
@@ -357,17 +408,25 @@ const queueOrders: Record<"title" | "size" | "sizeleft", Order.Order<QueueItem>>
 
 const QueueFilter = Schema.Struct({
   movieId: Schema.optional(
-    Eq(Schema.Number).annotations({ description: "Scope to one movie's downloads." }),
+    EqualityOperators(Schema.Number).annotations({
+      description: "Scope to one movie's downloads.",
+    }),
   ),
   status: Schema.optional(
-    Eq(Schema.String).annotations({ description: "queued | downloading | paused | completed | …" }),
+    EqualityOperators(Schema.String).annotations({
+      description: "queued | downloading | paused | completed | …",
+    }),
   ),
   trackedDownloadState: Schema.optional(
-    Eq(Schema.String).annotations({ description: "downloading | importPending | imported | …" }),
+    EqualityOperators(Schema.String).annotations({
+      description: "downloading | importPending | imported | …",
+    }),
   ),
-  protocol: Schema.optional(Eq(Schema.String).annotations({ description: "torrent | usenet" })),
+  protocol: Schema.optional(
+    EqualityOperators(Schema.String).annotations({ description: "torrent | usenet" }),
+  ),
   title: Schema.optional(
-    Text.annotations({ description: "Match the queued release title (text operators)." }),
+    TextOperators.annotations({ description: "Match the queued release title (text operators)." }),
   ),
 })
 type QueueFilterValue = Schema.Schema.Type<typeof QueueFilter>

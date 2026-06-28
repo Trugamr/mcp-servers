@@ -8,7 +8,7 @@ Legend: `[x]` shipped · `[ ]` planned. Paths omit the `/api/v3` prefix (Radarr'
 
 ## List query conventions
 
-`/movie`, `/release`, and `/queue` return flat lists with no server-side query support, so the `@trugamr/radarr-mcp` list tools apply filtering, sorting, and paging **client-side** after the fetch — the same structured query `@trugamr/sonarr-mcp` uses for `list_series`: per-field `filter` operators (`eq`/`ne`/`in`/`gte`/`contains`/…), multi-field `sort`, and an opaque-cursor `page`, with a `{ items, nextCursor?, totalRecords }` envelope. The SDK methods stay thin (just the endpoint + its native params, as Sonarr's SDK exposes them); the query richness lives in the MCP layer.
+`/movie`, `/release`, and `/queue` return flat lists with no server-side query support, so the `@trugamr/radarr-mcp` list tools apply filtering, sorting, and paging **client-side** after the fetch — the same structured query `@trugamr/sonarr-mcp` uses for `list_series`: per-field `filter` operators (`eq`/`ne`/`in`/`nin`/`gte`/`contains`/…), multi-field `sort`, and an opaque-cursor `page`, with a `{ items, nextCursor?, totalRecords }` envelope. Multi-valued fields like a movie's `genres` filter with **set semantics** — positive operators (`eq`/`in`/`contains`) match when any value qualifies, negatives (`ne`/`nin`) exclude any item carrying the value. The SDK methods stay thin (just the endpoint + its native params, as Sonarr's SDK exposes them); the query richness lives in the MCP layer.
 
 Codec (HEVC/x265) is the one field with no structured home — Radarr puts it only in a release's `title` — so `search_releases` filters it via `filter.title.contains` (resolution comes from `filter.resolution`).
 

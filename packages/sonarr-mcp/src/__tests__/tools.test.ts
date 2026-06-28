@@ -11,6 +11,7 @@ import {
   listEpisodes,
   listSeries,
   SonarrToolkit,
+  type TextOperatorsValue,
 } from "../tools.js"
 import { episodeFixture } from "./fixtures/episode.js"
 import { seriesFixture } from "./fixtures/series.js"
@@ -246,6 +247,19 @@ describe("list_series query surface", () => {
     ).toEqual([1, 3])
   })
 
+  // Library genres: Alpha [Drama, Crime], Bravo [Comedy], Charlie [Drama].
+  it("filters genres with set semantics (existential positives, universal negatives)", async () => {
+    const byGenre = (genres: TextOperatorsValue) =>
+      Effect.runPromise(run((s) => listSeries(s, { filter: { genres } }))).then(ids)
+
+    expect(await byGenre({ contains: "drama" })).toEqual([1, 3])
+    expect(await byGenre({ eq: "Comedy" })).toEqual([2])
+    expect(await byGenre({ in: ["Crime", "Comedy"] })).toEqual([1, 2])
+    // Negatives exclude any item carrying the genre — not "some other genre differs".
+    expect(await byGenre({ ne: "Drama" })).toEqual([2])
+    expect(await byGenre({ nin: ["Drama"] })).toEqual([2])
+  })
+
   it("sorts by multiple fields and defaults to title ascending", async () => {
     const byYearDesc = await Effect.runPromise(
       run((s) => listSeries(s, { sort: [{ field: "year", order: "desc" }, { field: "title" }] })),
@@ -266,6 +280,9 @@ describe("list_series query surface", () => {
       expect(item).not.toHaveProperty("seasons")
       expect(item).not.toHaveProperty("overview")
     }
+
+    // genres rides along for genre-aware filtering/selection.
+    expect(alpha).toMatchObject({ genres: ["Drama", "Crime"] })
 
     // The fixed-size statistics/ratings are kept when the source has them.
     expect(charlie?.statistics).toEqual({
