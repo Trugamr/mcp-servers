@@ -22,10 +22,10 @@ Codec (HEVC/x265) is the one field with no structured home — Radarr puts it on
 
 - [x] `GET /movie` — `movie.list` → `list_movies`
 - [x] `GET /movie/{id}` — `movie.get`
-- [ ] `POST /movie` — add a movie (needs **Movie Lookup**)
+- [x] `GET /movie/lookup?term=` — search the metadata provider for a movie to add — `movie.lookup` → `lookup_movie`
+- [x] `POST /movie` — add a movie by tmdbId — `movie.add` → `add_movie`. The add re-looks the movie up via `GET /movie/lookup/tmdb?tmdbId=` (so the post carries the full resource) and sets `addOptions.searchForMovie: false`; grabbing stays explicit via `search_releases` → `grab_release`.
+- [x] `DELETE /movie/{id}` — delete a movie (`deleteFiles`, `addImportListExclusion`) — `movie.remove` → `remove_movie`
 - [ ] `PUT /movie/{id}` — update a movie (full-resource round-trip)
-- [ ] `DELETE /movie/{id}` — delete a movie (`deleteFiles`, `addImportExclusion`)
-- [ ] `GET /movie/lookup?term=`, `GET /movie/lookup/tmdb?tmdbId=` — search for a movie to add (**Movie Lookup**)
 
 The `Movie` schema models a lean identify-and-reason-about field set; `Schema.Struct` drops the rest, so these payload fields are **shipped by Radarr but not yet modeled**:
 
@@ -42,13 +42,13 @@ The `Movie` schema models a lean identify-and-reason-about field set; `Schema.St
 
 ## Quality Profile
 
-- [ ] `GET /qualityprofile` — list quality profiles
+- [x] `GET /qualityprofile` — list quality profiles — `qualityProfile.list` → `list_quality_profiles` (so a caller can pick a profile id for `add_movie`)
 - [ ] `GET /qualityprofile/{id}` — get one profile
 - [ ] `POST` / `PUT` / `DELETE /qualityprofile` — manage profiles
 
 ## Root Folder
 
-- [ ] `GET /rootfolder` — list root folders
+- [x] `GET /rootfolder` — list root folders — `rootFolder.list` → `list_root_folders` (so a caller can pick a root path for `add_movie`)
 - [ ] `POST /rootfolder` — add a root folder
 - [ ] `DELETE /rootfolder/{id}` — delete a root folder
 

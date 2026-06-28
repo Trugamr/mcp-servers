@@ -1,11 +1,15 @@
 import { Tool, Toolkit } from "@effect/ai"
 import {
+  type AddMovie,
   Movie,
+  MovieLookup,
+  QualityProfile,
   QueueItem,
   Radarr,
   type RadarrError,
   type RadarrService,
   Release,
+  RootFolder,
   SystemStatus,
 } from "@trugamr/radarr/effect"
 import { Context, Effect, Encoding, Order, Predicate, Schema } from "effect"
@@ -22,6 +26,9 @@ const GrabResult = Schema.Struct({
   indexerId: Schema.Number,
   title: Schema.optional(Schema.String),
 })
+
+/** Confirmation echoed back after a remove — the SDK call is void, so the removed id stands in. */
+const RemovedMovie = Schema.Struct({ id: Schema.Number })
 
 /**
  * Surface a typed `RadarrError` as a JSON-serializable tool error. The message is
@@ -45,6 +52,9 @@ const hints = (annotations: {
 const readonlyHints = hints({ readonly: true, destructive: false, openWorld: false })
 const searchHints = hints({ readonly: true, destructive: false, openWorld: true })
 const grabHints = hints({ readonly: false, destructive: false, openWorld: true })
+// Add reaches Radarr's metadata provider to resolve the movie; remove stays local.
+const addHints = hints({ readonly: false, destructive: false, openWorld: true })
+const removeHints = hints({ readonly: false, destructive: true, openWorld: false })
 
 // Structured query surface for the list tools: filter / sort / paginate, applied
 // client-side because Radarr's `/movie`, `/release`, and `/queue` reads return flat
@@ -168,6 +178,9 @@ const CursorPage = <A, I>(item: Schema.Schema<A, I>) =>
     totalRecords: Schema.Number,
   })
 
+/** Plain list envelope for small, unpaged results — `{ items }`; MCP rejects a bare array. */
+const ListResult = <A, I>(item: Schema.Schema<A, I>) => Schema.Struct({ items: Schema.Array(item) })
+
 // The opaque cursor is a base64url-encoded `{ offset }` JSON object. Clients must
 // treat it as opaque; the offset is meaningful only against the same filter+sort,
 // and a default sort keeps it stable across calls.
@@ -218,6 +231,7 @@ const MovieSummary = Movie.pick(
   "status",
   "monitored",
   "tmdbId",
+  "imdbId",
   "qualityProfileId",
   "hasFile",
   "studio",
@@ -236,6 +250,7 @@ const toMovieSummary = (m: Movie): MovieSummary => ({
   tmdbId: m.tmdbId,
   qualityProfileId: m.qualityProfileId,
   hasFile: m.hasFile,
+  ...(Predicate.isNotUndefined(m.imdbId) && { imdbId: m.imdbId }),
   ...(Predicate.isNotUndefined(m.studio) && { studio: m.studio }),
   ...(Predicate.isNotUndefined(m.genres) && { genres: m.genres }),
   ...(Predicate.isNotUndefined(m.path) && { path: m.path }),
@@ -304,6 +319,50 @@ const movieOrder = (sort: MovieSortValue = []) =>
       s.order === "desc" ? Order.reverse(movieOrders[s.field]) : movieOrders[s.field],
     ),
   )
+
+// ---- movie lookup / profiles / root folders -------------------------------
+
+// Lean lookup candidate: identity plus the tmdbId an add needs, and the context to
+// pick the right title and decide whether to add it. `status` (released/announced/
+// inCinemas) and `runtime` inform the add decision and disambiguate same-title hits.
+// `id` is present only for a movie already in the library (its library id); a missing
+// id marks a candidate not added yet.
+const MovieLookupSummary = MovieLookup.pick(
+  "id",
+  "tmdbId",
+  "title",
+  "year",
+  "status",
+  "runtime",
+  "overview",
+  "imdbId",
+  "studio",
+  "genres",
+)
+type MovieLookupSummary = Schema.Schema.Type<typeof MovieLookupSummary>
+
+const toMovieLookupSummary = (m: MovieLookup): MovieLookupSummary => ({
+  tmdbId: m.tmdbId,
+  title: m.title,
+  year: m.year,
+  ...(Predicate.isNotUndefined(m.id) && { id: m.id }),
+  ...(Predicate.isNotUndefined(m.status) && { status: m.status }),
+  ...(Predicate.isNotUndefined(m.runtime) && { runtime: m.runtime }),
+  ...(Predicate.isNotUndefined(m.overview) && { overview: m.overview }),
+  ...(Predicate.isNotUndefined(m.imdbId) && { imdbId: m.imdbId }),
+  ...(Predicate.isNotUndefined(m.studio) && { studio: m.studio }),
+  ...(Predicate.isNotUndefined(m.genres) && { genres: m.genres }),
+})
+
+// Just id + name — enough to pick a profile for an add. The quality list it allows is
+// dropped; codec (HEVC/x265) isn't a profile concept, so the name carries the signal.
+const QualityProfileSummary = QualityProfile.pick("id", "name")
+type QualityProfileSummary = Schema.Schema.Type<typeof QualityProfileSummary>
+
+const toQualityProfileSummary = (p: QualityProfile): QualityProfileSummary => ({
+  id: p.id,
+  name: p.name,
+})
 
 // ---- release --------------------------------------------------------------
 
@@ -519,12 +578,75 @@ const ListQueue = Tool.make("list_queue", {
   failure: ToolError,
 }).annotateContext(readonlyHints)
 
+const LookupMovie = Tool.make("lookup_movie", {
+  description:
+    "Search the metadata provider for a movie to add to the library, by a free-text term " +
+    "(title, year, imdb, or tmdb). Returns candidates carrying their tmdbId; an item with no id " +
+    "isn't in the library yet, while a present id is its existing library movie id. Pass the " +
+    "chosen tmdbId to add_movie. Slow — it queries an external metadata provider.",
+  parameters: { term: Schema.String },
+  success: ListResult(MovieLookupSummary),
+  failure: ToolError,
+}).annotateContext(searchHints)
+
+const AddMovie = Tool.make("add_movie", {
+  description:
+    "Add a movie to the library by its tmdbId (from lookup_movie), under a quality profile " +
+    "(list_quality_profiles) and root folder (list_root_folders). This does NOT start a release " +
+    "search — to get a file, follow up with search_releases then grab_release, filtering codec " +
+    "(HEVC/x265) and resolution there. Returns the added movie.",
+  parameters: {
+    tmdbId: Schema.Number,
+    qualityProfileId: Schema.Number,
+    rootFolderPath: Schema.String,
+    monitored: Schema.optional(Schema.Boolean),
+    minimumAvailability: Schema.optional(Schema.String),
+  },
+  success: MovieSummary,
+  failure: ToolError,
+}).annotateContext(addHints)
+
+const RemoveMovie = Tool.make("remove_movie", {
+  description:
+    "Remove a movie from the library by its Radarr movie id. Set deleteFiles to also delete its " +
+    "files on disk, and addImportListExclusion to keep an import list from re-adding it. Echoes " +
+    "the removed id.",
+  parameters: {
+    id: Schema.Number,
+    deleteFiles: Schema.optional(Schema.Boolean),
+    addImportListExclusion: Schema.optional(Schema.Boolean),
+  },
+  success: RemovedMovie,
+  failure: ToolError,
+}).annotateContext(removeHints)
+
+const ListQualityProfiles = Tool.make("list_quality_profiles", {
+  description:
+    "List the Radarr quality profiles (id + name) to pick one for add_movie. Note HEVC/x265 " +
+    "isn't a profile field — codec is chosen at grab time via the release title.",
+  success: ListResult(QualityProfileSummary),
+  failure: ToolError,
+}).annotateContext(readonlyHints)
+
+const ListRootFolders = Tool.make("list_root_folders", {
+  description:
+    "List the configured Radarr root folders and their free space, to pick a rootFolderPath for " +
+    "add_movie.",
+  success: ListResult(RootFolder),
+  failure: ToolError,
+}).annotateContext(readonlyHints)
+
 export const RadarrToolkit = Toolkit.make(
   GetSystemStatus,
   ListMovies,
+  LookupMovie,
+  AddMovie,
+  RemoveMovie,
   SearchReleases,
   GrabRelease,
   ListQueue,
+  ListQualityProfiles,
+  ListRootFolders,
 )
 
 // Handlers in isolation: call the Radarr client and map `RadarrError` to the
@@ -533,6 +655,19 @@ export const RadarrToolkit = Toolkit.make(
 /** Run a Radarr operation, surfacing its `RadarrError` as the tool-error shape. */
 const handle = <A>(effect: Effect.Effect<A, RadarrError>) =>
   effect.pipe(Effect.mapError(toToolError))
+
+/**
+ * Run a Radarr list operation, wrapping the array as `{ items }` so the tool's
+ * structured output is a JSON object — MCP rejects a bare array there.
+ */
+const handleList = <A>(effect: Effect.Effect<ReadonlyArray<A>, RadarrError>) =>
+  handle(effect).pipe(Effect.map((items) => ({ items })))
+
+/** Like `handleList`, projecting each row to a lean summary before wrapping. */
+const handleListProjected = <A, B>(
+  effect: Effect.Effect<ReadonlyArray<A>, RadarrError>,
+  project: (a: A) => B,
+) => handle(effect).pipe(Effect.map((items) => ({ items: items.map(project) })))
 
 export interface MovieListArguments {
   readonly filter?: MovieFilterValue | undefined
@@ -559,6 +694,15 @@ export interface GrabArguments {
   readonly title?: string | undefined
 }
 
+/** The MCP `add_movie` input is exactly the SDK's add payload. */
+export type MovieAddArguments = AddMovie
+
+export interface MovieRemoveArguments {
+  readonly id: number
+  readonly deleteFiles?: boolean | undefined
+  readonly addImportListExclusion?: boolean | undefined
+}
+
 export const getSystemStatus = (radarr: RadarrService) => handle(radarr.system.getStatus)
 
 export const listMovies = (radarr: RadarrService, p: MovieListArguments = {}) =>
@@ -573,6 +717,29 @@ export const listMovies = (radarr: RadarrService, p: MovieListArguments = {}) =>
       ),
     ),
   )
+
+export const lookupMovie = (radarr: RadarrService, term: string) =>
+  handleListProjected(radarr.movie.lookup(term), toMovieLookupSummary)
+
+/** Add a movie by tmdbId and project the created movie to a lean summary. */
+export const addMovie = (radarr: RadarrService, input: MovieAddArguments) =>
+  handle(radarr.movie.add(input).pipe(Effect.map(toMovieSummary)))
+
+/** Remove a movie, echoing the id back since the SDK call is void. */
+export const removeMovie = (radarr: RadarrService, input: MovieRemoveArguments) =>
+  handle(
+    radarr.movie
+      .remove(input.id, {
+        deleteFiles: input.deleteFiles,
+        addImportListExclusion: input.addImportListExclusion,
+      })
+      .pipe(Effect.as({ id: input.id })),
+  )
+
+export const listQualityProfiles = (radarr: RadarrService) =>
+  handleListProjected(radarr.qualityProfile.list, toQualityProfileSummary)
+
+export const listRootFolders = (radarr: RadarrService) => handleList(radarr.rootFolder.list)
 
 export const searchReleases = (radarr: RadarrService, p: ReleaseSearchArguments) =>
   decodeCursor(p.page?.cursor).pipe(
@@ -622,9 +789,14 @@ export const RadarrToolkitLive = RadarrToolkit.toLayer(
     return {
       get_system_status: () => getSystemStatus(radarr),
       list_movies: (parameters) => listMovies(radarr, parameters),
+      lookup_movie: ({ term }) => lookupMovie(radarr, term),
+      add_movie: (input) => addMovie(radarr, input),
+      remove_movie: (input) => removeMovie(radarr, input),
       search_releases: (parameters) => searchReleases(radarr, parameters),
       grab_release: (input) => grabRelease(radarr, input),
       list_queue: (parameters) => listQueue(radarr, parameters),
+      list_quality_profiles: () => listQualityProfiles(radarr),
+      list_root_folders: () => listRootFolders(radarr),
     }
   }),
 )

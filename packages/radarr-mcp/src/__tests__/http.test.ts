@@ -13,9 +13,14 @@ const endpoint = `http://${host}:${port}/mcp`
 const TOOL_NAMES = [
   "get_system_status",
   "list_movies",
+  "lookup_movie",
+  "add_movie",
+  "remove_movie",
   "search_releases",
   "grab_release",
   "list_queue",
+  "list_quality_profiles",
+  "list_root_folders",
 ]
 
 // Dummy Radarr config so the toolkit layer builds. These transport tests stop at

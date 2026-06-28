@@ -2,12 +2,18 @@ import { Context, type Effect, Layer } from "effect"
 import { decodeConfig, type RadarrConfig, type RadarrConfigInput } from "./config.js"
 import type { RadarrError } from "./errors.js"
 import * as movie from "./movie.js"
+import type { AddMovie, RemoveMovieOptions } from "./movie.js"
+import * as qualityProfile from "./quality-profile.js"
 import * as queue from "./queue.js"
 import * as release from "./release.js"
 import type { ReleaseGrab } from "./release.js"
+import * as rootFolder from "./root-folder.js"
 import type { Movie } from "./schemas/movie.js"
+import type { MovieLookup } from "./schemas/movie-lookup.js"
+import type { QualityProfile } from "./schemas/quality-profile.js"
 import type { QueuePage } from "./schemas/queue.js"
 import type { Release } from "./schemas/release.js"
+import type { RootFolder } from "./schemas/root-folder.js"
 import type { SystemStatus } from "./schemas/system-status.js"
 import { getStatus } from "./system.js"
 
@@ -19,6 +25,9 @@ export interface RadarrV3Api {
   readonly movie: {
     readonly list: Effect.Effect<ReadonlyArray<Movie>, RadarrError>
     readonly get: (id: number) => Effect.Effect<Movie, RadarrError>
+    readonly lookup: (term: string) => Effect.Effect<ReadonlyArray<MovieLookup>, RadarrError>
+    readonly add: (input: AddMovie) => Effect.Effect<Movie, RadarrError>
+    readonly remove: (id: number, options?: RemoveMovieOptions) => Effect.Effect<void, RadarrError>
   }
   readonly release: {
     readonly search: (movieId: number) => Effect.Effect<ReadonlyArray<Release>, RadarrError>
@@ -26,6 +35,12 @@ export interface RadarrV3Api {
   }
   readonly queue: {
     readonly list: Effect.Effect<QueuePage, RadarrError>
+  }
+  readonly qualityProfile: {
+    readonly list: Effect.Effect<ReadonlyArray<QualityProfile>, RadarrError>
+  }
+  readonly rootFolder: {
+    readonly list: Effect.Effect<ReadonlyArray<RootFolder>, RadarrError>
   }
 }
 
@@ -45,6 +60,9 @@ const makeV3 = (config: RadarrConfig): RadarrV3Api => ({
   movie: {
     list: movie.list(config),
     get: (id) => movie.get(config, id),
+    lookup: (term) => movie.lookup(config, term),
+    add: (input) => movie.add(config, input),
+    remove: (id, options) => movie.remove(config, id, options),
   },
   release: {
     search: (movieId) => release.search(config, movieId),
@@ -52,6 +70,12 @@ const makeV3 = (config: RadarrConfig): RadarrV3Api => ({
   },
   queue: {
     list: queue.list(config),
+  },
+  qualityProfile: {
+    list: qualityProfile.list(config),
+  },
+  rootFolder: {
+    list: rootFolder.list(config),
   },
 })
 
