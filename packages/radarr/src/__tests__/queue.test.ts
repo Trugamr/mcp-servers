@@ -15,6 +15,8 @@ describe("Radarr service — queue", () => {
     expect(page.totalRecords).toBe(1)
     expect(page.records).toHaveLength(1)
     expect(page.records[0]?.trackedDownloadState).toBe("downloading")
+    // downloadId is the cross-poll correlation handle — it must decode.
+    expect(page.records[0]?.downloadId).toBe("a1b2c3d4e5f60718293a4b5c6d7e8f90")
     // errorMessage: null normalizes to absent.
     expect(page.records[0]?.errorMessage).toBeUndefined()
   })

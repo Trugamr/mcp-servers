@@ -20,8 +20,13 @@ const ToolError = Schema.Struct({
   message: Schema.String,
 })
 
-/** Confirmation echoed back after a grab — the keys grabbed, plus the optional title. */
+/**
+ * Acknowledgement returned by a grab. `accepted: true` marks that Radarr took the
+ * release — not that the download started; `list_queue` confirms that. Echoes the keys
+ * grabbed, plus the optional title.
+ */
 const GrabResult = Schema.Struct({
+  accepted: Schema.Boolean,
   guid: Schema.String,
   indexerId: Schema.Number,
   title: Schema.optional(Schema.String),
@@ -466,9 +471,20 @@ const queueOrders: Record<"title" | "size" | "sizeleft", Order.Order<QueueItem>>
 }
 
 const QueueFilter = Schema.Struct({
+  id: Schema.optional(
+    EqualityOperators(Schema.Number).annotations({
+      description: "The queue record's own id.",
+    }),
+  ),
   movieId: Schema.optional(
     EqualityOperators(Schema.Number).annotations({
       description: "Scope to one movie's downloads.",
+    }),
+  ),
+  downloadId: Schema.optional(
+    EqualityOperators(Schema.String).annotations({
+      description:
+        "The download client's id (torrent hash / nzb id) — stable across polls and into history.",
     }),
   ),
   status: Schema.optional(
@@ -499,7 +515,9 @@ type QueueSortValue = Schema.Schema.Type<typeof QueueSort>
 
 const matchesQueue = (q: QueueItem, f: QueueFilterValue = {}) =>
   matchText(q.title, f.title) &&
+  matchEquality(q.id, f.id) &&
   matchEquality(q.movieId, f.movieId) &&
+  matchEquality(q.downloadId, f.downloadId) &&
   matchEquality(q.status, f.status) &&
   matchEquality(q.trackedDownloadState, f.trackedDownloadState) &&
   matchEquality(q.protocol, f.protocol)
@@ -554,13 +572,16 @@ const SearchReleases = Tool.make("search_releases", {
 const GrabRelease = Tool.make("grab_release", {
   description:
     "Grab a release found by search_releases (identified by its guid + indexerId) and hand it to " +
-    "the download client; it then appears in list_queue.",
+    "the download client. Returns immediately with accepted: true — an acknowledgement, NOT " +
+    "confirmation that the download started. To confirm, poll list_queue filtered by the movieId " +
+    "you searched, find the new record, then track it by its downloadId (filter.downloadId) and " +
+    "watch status / trackedDownloadState.",
   parameters: {
     guid: Schema.String,
     indexerId: Schema.Number,
     title: Schema.optional(
       Schema.String.annotations({
-        description: "The release title, echoed back in the confirmation. Optional.",
+        description: "The release title, echoed back in the acknowledgement. Optional.",
       }),
     ),
   },
@@ -776,9 +797,14 @@ export const searchReleases = (radarr: RadarrService, p: ReleaseSearchArguments)
     ),
   )
 
-/** Grab a release, echoing the keys (and optional title) back since the SDK call is void. */
+/**
+ * Grab a release. The SDK call is void (Radarr 201s empty), so this returns an
+ * acknowledgement — `accepted: true` plus the grabbed keys — not a confirmation that
+ * the download started. The caller confirms by polling `list_queue`.
+ */
 export const grabRelease = (radarr: RadarrService, input: GrabArguments) => {
-  const confirmation = {
+  const acknowledgement = {
+    accepted: true,
     guid: input.guid,
     indexerId: input.indexerId,
     ...(Predicate.isNotUndefined(input.title) && { title: input.title }),
@@ -786,7 +812,7 @@ export const grabRelease = (radarr: RadarrService, input: GrabArguments) => {
   return handle(
     radarr.release
       .grab({ guid: input.guid, indexerId: input.indexerId })
-      .pipe(Effect.as(confirmation)),
+      .pipe(Effect.as(acknowledgement)),
   )
 }
 

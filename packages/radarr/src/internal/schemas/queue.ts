@@ -5,6 +5,8 @@ import { Quality } from "./quality.js"
 /**
  * One item in `GET /api/v3/queue` — a grab in flight on the download client. Lean:
  * enough for an agent to report progress and spot a stuck or errored download.
+ * `downloadId` is the download client's id (torrent hash / nzb id) — the stable handle
+ * that correlates a grab to its queue record and follows it on into history.
  * `sizeleft`/`timeleft` keep Radarr's lowercase field names. `Schema.Struct` drops
  * the rest of the (large) queue payload.
  */
@@ -20,6 +22,7 @@ export const QueueItem = Schema.Struct({
   timeleft: optionalNullable(Schema.String),
   estimatedCompletionTime: optionalNullable(Schema.String),
   indexer: optionalNullable(Schema.String),
+  downloadId: optionalNullable(Schema.String),
   downloadClient: optionalNullable(Schema.String),
   protocol: Schema.optional(Schema.String),
   quality: Schema.optional(Quality),
