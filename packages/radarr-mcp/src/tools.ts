@@ -35,10 +35,7 @@ const GrabResult = Schema.Struct({
   title: Schema.optional(Schema.String),
 })
 
-/** Confirmation echoed back after a remove — the SDK call is void, so the removed id stands in. */
-const RemovedMovie = Schema.Struct({ id: Schema.Number })
-
-/** Confirmation echoed back after a delete — the SDK call is void, so the deleted id stands in. */
+/** Confirmation echoed back after a delete/remove — the SDK call is void, so the id stands in. */
 const DeletedResource = Schema.Struct({ id: Schema.Number })
 
 /**
@@ -668,7 +665,7 @@ const RemoveMovie = Tool.make("remove_movie", {
       }),
     ),
   },
-  success: RemovedMovie,
+  success: DeletedResource,
   failure: ToolError,
 }).annotateContext(removeHints)
 

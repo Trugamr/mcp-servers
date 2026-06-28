@@ -9,7 +9,7 @@ const Quality = Schema.Struct({
   resolution: Schema.optional(Schema.Number),
 })
 
-/** A single quality nested inside a quality group. */
+/** A single quality — the leaf of a profile's quality list and the member of a group. */
 const QualityProfileGroupItem = Schema.Struct({
   id: Schema.optional(Schema.Number),
   name: optionalNullable(Schema.String),
@@ -18,15 +18,12 @@ const QualityProfileGroupItem = Schema.Struct({
 })
 
 /**
- * An entry in a profile's quality list — either a single quality (carries `quality`)
- * or a named group that nests its own qualities under `items`. Radarr groups hold
- * individual qualities and don't nest further, so one level is modeled.
+ * An entry in a profile's quality list — a single quality (carries `quality`) or a
+ * named group that nests its own qualities under `items`. Radarr groups hold individual
+ * qualities and don't nest further, so one level is modeled.
  */
 const QualityProfileItem = Schema.Struct({
-  id: Schema.optional(Schema.Number),
-  name: optionalNullable(Schema.String),
-  allowed: Schema.Boolean,
-  quality: Schema.optional(Quality),
+  ...QualityProfileGroupItem.fields,
   items: Schema.optional(Schema.Array(QualityProfileGroupItem)),
 })
 
