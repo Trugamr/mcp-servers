@@ -54,6 +54,7 @@ export interface RadarrV3Api {
   }
   readonly language: {
     readonly list: Effect.Effect<ReadonlyArray<Language>, RadarrError>
+    readonly get: (id: number) => Effect.Effect<Language, RadarrError>
   }
   readonly rootFolder: {
     readonly list: Effect.Effect<ReadonlyArray<RootFolder>, RadarrError>
@@ -96,6 +97,7 @@ const makeV3 = (config: RadarrConfig): RadarrV3Api => ({
   },
   language: {
     list: language.list(config),
+    get: (id) => language.get(config, id),
   },
   rootFolder: {
     list: rootFolder.list(config),

@@ -9,3 +9,7 @@ const basePath = `${apiBase}/language`
 /** `GET /api/v3/language` — every language Radarr knows. */
 export const list = (config: RadarrConfig) =>
   provideTransport(getJson(config, Schema.Array(Language), basePath))
+
+/** `GET /api/v3/language/{id}` — a single language by its id. */
+export const get = (config: RadarrConfig, id: number) =>
+  provideTransport(getJson(config, Language, `${basePath}/${id}`))

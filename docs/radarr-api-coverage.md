@@ -55,7 +55,7 @@ A profile is modeled faithfully enough to clone and re-send: its quality `items`
 Radarr's language list is fixed (read-only); a quality profile's `language` references one by id.
 
 - [x] `GET /language` — list languages — `language.list` → `list_languages`
-- [ ] `GET /language/{id}` — get one language
+- [x] `GET /language/{id}` — get one language — `language.get` (SDK only; no tool yet)
 
 ## Root Folder
 

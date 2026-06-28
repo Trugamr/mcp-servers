@@ -23,6 +23,15 @@ describe("Radarr service — language", () => {
     expect(languages).toContainEqual({ id: 1, name: "English" })
   })
 
+  it("gets a language by id, interpolating it into the path", async () => {
+    // Registered only for `/language/1`; onUnhandledRequest: "error" catches wrong paths.
+    server.use(http.get(`${url}/1`, () => HttpResponse.json({ id: 1, name: "English" })))
+
+    const language = successOf(await runExit((radarr) => radarr.language.get(1)))
+
+    expect(language).toEqual({ id: 1, name: "English" })
+  })
+
   it("maps a non-2xx status to a typed RadarrResponseError", async () => {
     server.use(http.get(url, () => new HttpResponse(null, { status: 500 })))
 
