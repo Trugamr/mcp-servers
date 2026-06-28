@@ -1,0 +1,37 @@
+name: Setup workspace
+description: Set up pnpm, Node (from .nvmrc), install dependencies, and cache Turbo.
+
+# Every workflow job that runs the toolchain needs the same four steps. They live here once so CI,
+# the reusable checks workflow, and the release job stay in lockstep. The caller runs actions/checkout
+# first (its params differ per job — persist-credentials, fetch-depth), then calls this action.
+inputs:
+  registry-url:
+    description: npm registry to write an auth-ready .npmrc for (NODE_AUTH_TOKEN). Empty skips it.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v6
+      # no version input — read from the "packageManager" field (pnpm@10.10.0)
+
+    - name: Setup Node
+      uses: actions/setup-node@v6
+      with:
+        node-version-file: .nvmrc # single source of truth for the Node version
+        cache: pnpm # caches the pnpm store, keyed on pnpm-lock.yaml
+        registry-url: ${{ inputs.registry-url }} # only the release job passes one (npm publish auth)
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Cache turbo
+      uses: actions/cache@v6
+      with:
+        path: .turbo
+        key: ${{ runner.os }}-turbo-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-turbo-
