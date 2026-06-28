@@ -73,13 +73,15 @@ The `Movie` schema models a lean identify-and-reason-about field set; `Schema.St
 
 ## Release
 
-Interactive search hits the configured indexers live for a movie **already in the library**, then a grab hands the chosen release to the download client (where it surfaces in the queue). Codec (HEVC/x265) isn't a structured field — it lives only in a release's `title`, so a caller filtering for e.g. "1080p hevc" reads `quality` for the resolution and the title string for the codec.
+Interactive search hits the configured indexers live for a movie **already in the library**, then a grab hands the chosen release to the download client (where it surfaces in the queue). Codec (HEVC/x265) isn't a structured field — it lives only in a release's `title`, so a caller filtering for e.g. "1080p hevc" reads `quality` for the resolution and the title string for the codec. `POST /release` returns an empty `201`, so a grab is an acknowledgement, not a confirmation — `grab_release` returns `accepted: true` and the caller confirms by polling `list_queue`.
 
 - [x] `GET /release?movieId=` — interactive search for a movie's releases — `release.search` → `search_releases`
-- [x] `POST /release` — grab a release (`guid` + `indexerId`) and send it to the download client — `release.grab` → `grab_release`
+- [x] `POST /release` — grab a release (`guid` + `indexerId`) and send it to the download client; returns `accepted: true` — `release.grab` → `grab_release`
 - [ ] `POST /release/push` — push a release Radarr didn't find itself
 
 ## Queue
+
+A queue record carries `downloadId` (the download client's torrent hash / nzb id) — the stable handle that correlates a grab to its queue record and follows it on into history. `list_queue` filters by `downloadId` and the record's own `id`, so after a grab the caller polls by `movieId`, reads the new record's `downloadId`, then tracks that exact item by `downloadId`.
 
 - [x] `GET /queue` — download queue, page one — `queue.list` → `list_queue`
 - [ ] `GET /queue` — full paging (`page`, `pageSize`, `sortKey`)

@@ -1,5 +1,6 @@
 /**
- * A `GET /api/v3/queue` envelope with one in-flight download. `errorMessage: null`
+ * A `GET /api/v3/queue` envelope with one in-flight download. `downloadId` is the
+ * download client's handle (the cross-poll correlation key); `errorMessage: null`
  * exercises `optionalNullable`, and the unmodeled `statusMessages`/`page` keys verify
  * `Schema.Struct` drops what it doesn't model.
  */
@@ -20,6 +21,7 @@ export const queuePageFixture = {
       timeleft: "00:25:00",
       estimatedCompletionTime: "2024-01-01T00:25:00Z",
       indexer: "Indexer (Prowlarr)",
+      downloadId: "a1b2c3d4e5f60718293a4b5c6d7e8f90",
       downloadClient: "qBittorrent",
       protocol: "torrent",
       quality: { quality: { name: "Bluray-1080p", resolution: 1080 } },

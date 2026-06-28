@@ -12,10 +12,12 @@ import {
   listQueue,
   listRootFolders,
   lookupMovie,
+  type MovieListArguments,
+  type QueueListArguments,
   RadarrToolkit,
+  type ReleaseSearchArguments,
   removeMovie,
   searchReleases,
-  type TextOperatorsValue,
 } from "../tools.js"
 import { movieFixture } from "./fixtures/movie.js"
 import { movieLookupFixture, movieLookupTmdbFixture } from "./fixtures/movie-lookup.js"
@@ -102,7 +104,7 @@ describe("library + release tool handlers", () => {
     expect(items[0]).not.toHaveProperty("downloadUrl")
   })
 
-  it("grab_release posts guid + indexerId and echoes a confirmation with the title", async () => {
+  it("grab_release posts guid + indexerId and acknowledges with accepted + title", async () => {
     let body: unknown
     server.use(
       http.post(apiUrl("/release"), async ({ request }) => {
@@ -115,29 +117,31 @@ describe("library + release tool handlers", () => {
       run((radarr) => grabRelease(radarr, { guid: "abc", indexerId: 2, title: "The Dark Knight" })),
     )
 
-    // Only the grab keys go on the wire; the title is echoed back from the input.
+    // Only the grab keys go on the wire; accepted + title come back from the handler.
     expect(body).toEqual({ guid: "abc", indexerId: 2 })
-    expect(result).toEqual({ guid: "abc", indexerId: 2, title: "The Dark Knight" })
+    expect(result).toEqual({ accepted: true, guid: "abc", indexerId: 2, title: "The Dark Knight" })
   })
 
-  it("grab_release omits title from the confirmation when not provided", async () => {
+  it("grab_release omits title from the acknowledgement when not provided", async () => {
     server.use(http.post(apiUrl("/release"), () => new HttpResponse(null, { status: 201 })))
 
     const result = await Effect.runPromise(
       run((radarr) => grabRelease(radarr, { guid: "abc", indexerId: 2 })),
     )
 
-    expect(result).toEqual({ guid: "abc", indexerId: 2 })
+    expect(result).toEqual({ accepted: true, guid: "abc", indexerId: 2 })
     expect(result).not.toHaveProperty("title")
   })
 
-  it("list_queue unwraps the paginated records into items", async () => {
+  it("list_queue unwraps the paginated records into items, carrying downloadId", async () => {
     server.use(http.get(apiUrl("/queue"), () => HttpResponse.json(queuePageFixture)))
 
     const { items } = await Effect.runPromise(run((radarr) => listQueue(radarr)))
 
     expect(items).toHaveLength(1)
     expect(items[0]?.trackedDownloadState).toBe("downloading")
+    // downloadId is the handle the agent polls by after a grab.
+    expect(items[0]?.downloadId).toBe("a1b2c3d4e5f60718293a4b5c6d7e8f90")
   })
 
   it("maps a RadarrError into the tool-error shape (401 on list_movies)", async () => {
@@ -314,6 +318,10 @@ describe("list_movies query surface", () => {
 
   beforeEach(() => mockMovies(library))
 
+  // Run list_movies with one filter and return the matching ids (sorted).
+  const movieIds = (filter: MovieListArguments["filter"]) =>
+    Effect.runPromise(run((r) => listMovies(r, { filter }))).then(ids)
+
   it("caps the default page and returns a cursor for the next", async () => {
     mockMovies(
       Array.from({ length: 25 }, (_, index) =>
@@ -344,43 +352,20 @@ describe("list_movies query surface", () => {
   })
 
   it("filters by status, monitored, hasFile, and year range", async () => {
-    expect(
-      ids(
-        await Effect.runPromise(
-          run((r) => listMovies(r, { filter: { status: { eq: "released" } } })),
-        ),
-      ),
-    ).toEqual([1, 3])
-    expect(
-      ids(
-        await Effect.runPromise(run((r) => listMovies(r, { filter: { monitored: { eq: true } } }))),
-      ),
-    ).toEqual([1, 3])
-    expect(
-      ids(
-        await Effect.runPromise(run((r) => listMovies(r, { filter: { hasFile: { eq: false } } }))),
-      ),
-    ).toEqual([2, 3])
-    expect(
-      ids(
-        await Effect.runPromise(
-          run((r) => listMovies(r, { filter: { year: { gte: 2015, lte: 2016 } } })),
-        ),
-      ),
-    ).toEqual([2, 3])
+    expect(await movieIds({ status: { eq: "released" } })).toEqual([1, 3])
+    expect(await movieIds({ monitored: { eq: true } })).toEqual([1, 3])
+    expect(await movieIds({ hasFile: { eq: false } })).toEqual([2, 3])
+    expect(await movieIds({ year: { gte: 2015, lte: 2016 } })).toEqual([2, 3])
   })
 
   // Library genres: Alpha [Drama, Crime], Bravo [Comedy], Charlie [Drama].
   it("filters genres with set semantics (existential positives, universal negatives)", async () => {
-    const byGenre = (genres: TextOperatorsValue) =>
-      Effect.runPromise(run((r) => listMovies(r, { filter: { genres } }))).then(ids)
-
-    expect(await byGenre({ contains: "drama" })).toEqual([1, 3])
-    expect(await byGenre({ eq: "Comedy" })).toEqual([2])
-    expect(await byGenre({ in: ["Crime", "Comedy"] })).toEqual([1, 2])
+    expect(await movieIds({ genres: { contains: "drama" } })).toEqual([1, 3])
+    expect(await movieIds({ genres: { eq: "Comedy" } })).toEqual([2])
+    expect(await movieIds({ genres: { in: ["Crime", "Comedy"] } })).toEqual([1, 2])
     // Negatives exclude any item carrying the genre — not "some other genre differs".
-    expect(await byGenre({ ne: "Drama" })).toEqual([2])
-    expect(await byGenre({ nin: ["Drama"] })).toEqual([2])
+    expect(await movieIds({ genres: { ne: "Drama" } })).toEqual([2])
+    expect(await movieIds({ genres: { nin: ["Drama"] } })).toEqual([2])
   })
 
   it("sorts by year desc then title, and defaults to title ascending", async () => {
@@ -409,45 +394,32 @@ describe("search_releases query surface", () => {
     server.use(http.get(apiUrl("/release"), () => HttpResponse.json(releasesFixture))),
   )
 
-  it("filters by codec via the title (the 1080p HEVC case)", async () => {
-    const result = await Effect.runPromise(
-      run((r) =>
-        searchReleases(r, {
-          movieId: 5,
-          filter: { resolution: { eq: 1080 }, title: { contains: "hevc" } },
-        }),
-      ),
-    )
-    expect(guids(result)).toEqual(["https://indexer.test/abc"])
-  })
+  // Search releases for movie 5 with the given query and return the guids in result order.
+  const searchGuids = (query: Omit<ReleaseSearchArguments, "movieId"> = {}) =>
+    Effect.runPromise(run((r) => searchReleases(r, { movieId: 5, ...query }))).then(guids)
 
-  it("filters by protocol and approved", async () => {
+  it("filters by codec via the title (the 1080p HEVC case)", async () => {
     expect(
-      guids(
-        await Effect.runPromise(
-          run((r) => searchReleases(r, { movieId: 5, filter: { protocol: { eq: "usenet" } } })),
-        ),
-      ),
-    ).toEqual(["usenet-xyz"])
-    expect(
-      guids(
-        await Effect.runPromise(
-          run((r) => searchReleases(r, { movieId: 5, filter: { approved: { eq: true } } })),
-        ),
-      ),
+      await searchGuids({ filter: { resolution: { eq: 1080 }, title: { contains: "hevc" } } }),
     ).toEqual(["https://indexer.test/abc"])
   })
 
+  it("filters by protocol and approved", async () => {
+    expect(await searchGuids({ filter: { protocol: { eq: "usenet" } } })).toEqual(["usenet-xyz"])
+    expect(await searchGuids({ filter: { approved: { eq: true } } })).toEqual([
+      "https://indexer.test/abc",
+    ])
+  })
+
   it("sorts by seeders descending (usenet's missing seeders sort as 0, last)", async () => {
-    const result = await Effect.runPromise(
-      run((r) => searchReleases(r, { movieId: 5, sort: [{ field: "seeders", order: "desc" }] })),
-    )
-    expect(guids(result)).toEqual(["https://indexer.test/abc", "usenet-xyz"])
+    expect(await searchGuids({ sort: [{ field: "seeders", order: "desc" }] })).toEqual([
+      "https://indexer.test/abc",
+      "usenet-xyz",
+    ])
   })
 
   it("keeps Radarr's order when no sort is given", async () => {
-    const result = await Effect.runPromise(run((r) => searchReleases(r, { movieId: 5 })))
-    expect(guids(result)).toEqual(["https://indexer.test/abc", "usenet-xyz"])
+    expect(await searchGuids()).toEqual(["https://indexer.test/abc", "usenet-xyz"])
   })
 })
 
@@ -456,21 +428,22 @@ describe("list_queue query surface", () => {
     server.use(http.get(apiUrl("/queue"), () => HttpResponse.json(queuePageFixture))),
   )
 
+  // Run list_queue with one filter and return the matching records.
+  const queueItems = (filter: QueueListArguments["filter"]) =>
+    Effect.runPromise(run((r) => listQueue(r, { filter }))).then((result) => result.items)
+
   it("filters by status and movieId", async () => {
-    expect(
-      (
-        await Effect.runPromise(
-          run((r) => listQueue(r, { filter: { status: { eq: "downloading" } } })),
-        )
-      ).items,
-    ).toHaveLength(1)
-    expect(
-      (await Effect.runPromise(run((r) => listQueue(r, { filter: { status: { eq: "paused" } } }))))
-        .items,
-    ).toHaveLength(0)
-    expect(
-      (await Effect.runPromise(run((r) => listQueue(r, { filter: { movieId: { eq: 1 } } })))).items,
-    ).toHaveLength(1)
+    expect(await queueItems({ status: { eq: "downloading" } })).toHaveLength(1)
+    expect(await queueItems({ status: { eq: "paused" } })).toHaveLength(0)
+    expect(await queueItems({ movieId: { eq: 1 } })).toHaveLength(1)
+  })
+
+  it("filters by downloadId and the queue record id — the post-grab tracking keys", async () => {
+    const hash = "a1b2c3d4e5f60718293a4b5c6d7e8f90"
+    expect(await queueItems({ downloadId: { eq: hash } })).toHaveLength(1)
+    expect(await queueItems({ downloadId: { eq: "nope" } })).toHaveLength(0)
+    expect(await queueItems({ id: { eq: 101 } })).toHaveLength(1)
+    expect(await queueItems({ id: { eq: 999 } })).toHaveLength(0)
   })
 })
 
