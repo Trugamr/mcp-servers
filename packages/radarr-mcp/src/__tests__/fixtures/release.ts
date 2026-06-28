@@ -1,7 +1,8 @@
 /**
  * Two `GET /api/v3/release` candidates: a torrent (with seeders) and a usenet
  * release (no seeders). Codec lives in `title` — "x265 HEVC" vs "x264" — which the
- * agent filters on, since Radarr exposes no structured codec field.
+ * agent filters on, since Radarr exposes no structured codec field. The first carries
+ * `downloadUrl` (Radarr embeds an API key in it) to prove the surface strips it.
  */
 export const releasesFixture = [
   {

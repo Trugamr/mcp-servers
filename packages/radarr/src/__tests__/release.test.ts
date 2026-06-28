@@ -32,6 +32,8 @@ describe("Radarr service — release", () => {
     // Unmodeled keys (customFormats, revision) are dropped.
     expect(releases[0]).not.toHaveProperty("customFormats")
     expect(releases[0]?.quality).not.toHaveProperty("revision")
+    // downloadUrl carries an embedded API key, so the schema must strip it.
+    expect(releases[0]).not.toHaveProperty("downloadUrl")
   })
 
   it("grabs a release, posting guid + indexerId and resolving void on an empty body", async () => {
