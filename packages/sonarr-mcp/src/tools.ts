@@ -59,7 +59,7 @@ const MAX_PAGE_SIZE = 100
 const SortOrder = Schema.Literal("asc", "desc")
 
 /** Equality + set membership operators over a value type. */
-const Eq = <A, I>(s: Schema.Schema<A, I>) =>
+const EqualityOperators = <A, I>(s: Schema.Schema<A, I>) =>
   Schema.Struct({
     eq: Schema.optional(s),
     ne: Schema.optional(s),
@@ -67,7 +67,7 @@ const Eq = <A, I>(s: Schema.Schema<A, I>) =>
     nin: Schema.optional(Schema.Array(s)),
   })
 /** Ordered operators = equality/set + range comparisons (numbers, ISO-date strings). */
-const Ord = <A, I>(s: Schema.Schema<A, I>) =>
+const OrderedOperators = <A, I>(s: Schema.Schema<A, I>) =>
   Schema.Struct({
     eq: Schema.optional(s),
     ne: Schema.optional(s),
@@ -78,8 +78,8 @@ const Ord = <A, I>(s: Schema.Schema<A, I>) =>
     gt: Schema.optional(s),
     lt: Schema.optional(s),
   })
-/** Text operators. `contains` is a case-insensitive substring match. */
-const Text = Schema.Struct({
+/** Operators for a text field. `contains` is a case-insensitive substring match. */
+const TextOperators = Schema.Struct({
   eq: Schema.optional(Schema.String),
   ne: Schema.optional(Schema.String),
   contains: Schema.optional(Schema.String),
@@ -87,24 +87,24 @@ const Text = Schema.Struct({
   nin: Schema.optional(Schema.Array(Schema.String)),
 })
 /** Boolean operator. */
-const Bool = Schema.Struct({ eq: Schema.optional(Schema.Boolean) })
+const BooleanOperator = Schema.Struct({ eq: Schema.optional(Schema.Boolean) })
 /**
  * Single-value scope filter — only `eq`. For relationship-scope fields (e.g.
  * `series.id`, `season.number`) that map to Sonarr query params, which accept one
  * value with no ranges or set membership.
  */
-const ScopeEq = <A, I>(s: Schema.Schema<A, I>) => Schema.Struct({ eq: s })
+const ScopeOperator = <A, I>(s: Schema.Schema<A, I>) => Schema.Struct({ eq: s })
 
 // Operator-object value types are derived from the schema builders, so the
 // matchers can't drift from the schemas they validate against.
-type EqOp<A> = Schema.Schema.Type<ReturnType<typeof Eq<A, A>>>
-type OrdOp<A> = Schema.Schema.Type<ReturnType<typeof Ord<A, A>>>
-export type TextOp = Schema.Schema.Type<typeof Text>
-type BoolOp = Schema.Schema.Type<typeof Bool>
+type EqualityOperatorsValue<A> = Schema.Schema.Type<ReturnType<typeof EqualityOperators<A, A>>>
+type OrderedOperatorsValue<A> = Schema.Schema.Type<ReturnType<typeof OrderedOperators<A, A>>>
+export type TextOperatorsValue = Schema.Schema.Type<typeof TextOperators>
+type BooleanOperatorValue = Schema.Schema.Type<typeof BooleanOperator>
 
 // Each matcher returns true when the value satisfies every present operator (an
 // absent operator is a no-op), so a missing filter short-circuits to `true`.
-const matchEquality = <T>(value: T, operators?: EqOp<T>) =>
+const matchEquality = <T>(value: T, operators?: EqualityOperatorsValue<T>) =>
   !operators ||
   ((Predicate.isUndefined(operators.eq) || value === operators.eq) &&
     (Predicate.isUndefined(operators.ne) || value !== operators.ne) &&
@@ -113,7 +113,7 @@ const matchEquality = <T>(value: T, operators?: EqOp<T>) =>
 // A null/absent value fails any present ordered constraint.
 const matchOrdered = <T extends string | number>(
   value: T | null | undefined,
-  operators?: OrdOp<T>,
+  operators?: OrderedOperatorsValue<T>,
 ) =>
   !operators ||
   (Predicate.isNotNullable(value) &&
@@ -122,7 +122,7 @@ const matchOrdered = <T extends string | number>(
     (Predicate.isUndefined(operators.lte) || value <= operators.lte) &&
     (Predicate.isUndefined(operators.gt) || value > operators.gt) &&
     (Predicate.isUndefined(operators.lt) || value < operators.lt))
-const matchText = (value: string | null | undefined, operators?: TextOp) => {
+const matchText = (value: string | null | undefined, operators?: TextOperatorsValue) => {
   const text = value ?? ""
   return (
     !operators ||
@@ -138,7 +138,10 @@ const matchText = (value: string | null | undefined, operators?: TextOp) => {
 // positive operators are existential (some value satisfies them), negatives are
 // universal (no value violates them). An empty/absent field satisfies only the
 // negative operators — it isn't excluded by `ne`/`nin`.
-const matchTextArray = (field: ReadonlyArray<string> | undefined, operators?: TextOp) => {
+const matchTextArray = (
+  field: ReadonlyArray<string> | undefined,
+  operators?: TextOperatorsValue,
+) => {
   const values = field ?? []
   const containsLower = operators?.contains?.toLowerCase()
   return (
@@ -153,7 +156,7 @@ const matchTextArray = (field: ReadonlyArray<string> | undefined, operators?: Te
         !operators.nin.some((value) => values.includes(value))))
   )
 }
-const matchBoolean = (value: boolean, operators?: BoolOp) =>
+const matchBoolean = (value: boolean, operators?: BooleanOperatorValue) =>
   !operators || Predicate.isUndefined(operators.eq) || value === operators.eq
 
 const clamp = (n: number, lo: number, hi: number) =>
@@ -258,29 +261,33 @@ const seriesOrders: Record<"title" | "year" | "added", Order.Order<Series>> = {
 
 const SeriesFilter = Schema.Struct({
   title: Schema.optional(
-    Text.annotations({ description: "Match the series title (text operators)." }),
+    TextOperators.annotations({ description: "Match the series title (text operators)." }),
   ),
   status: Schema.optional(
-    Eq(Schema.String).annotations({ description: "continuing | ended | upcoming | deleted" }),
+    EqualityOperators(Schema.String).annotations({
+      description: "continuing | ended | upcoming | deleted",
+    }),
   ),
   seriesType: Schema.optional(
-    Eq(Schema.String).annotations({ description: "standard | daily | anime" }),
+    EqualityOperators(Schema.String).annotations({ description: "standard | daily | anime" }),
   ),
-  monitored: Schema.optional(Bool.annotations({ description: "Whether the series is monitored." })),
+  monitored: Schema.optional(
+    BooleanOperator.annotations({ description: "Whether the series is monitored." }),
+  ),
   qualityProfileId: Schema.optional(
-    Eq(Schema.Number).annotations({ description: "Quality profile id." }),
+    EqualityOperators(Schema.Number).annotations({ description: "Quality profile id." }),
   ),
   network: Schema.optional(
-    Text.annotations({ description: "Match the network (text operators)." }),
+    TextOperators.annotations({ description: "Match the network (text operators)." }),
   ),
   genres: Schema.optional(
-    Text.annotations({
+    TextOperators.annotations({
       description:
         "Match genres (set semantics), e.g. contains 'drama', in ['Drama'], nin ['Anime'].",
     }),
   ),
   year: Schema.optional(
-    Ord(Schema.Number).annotations({ description: "Release year (range ops)." }),
+    OrderedOperators(Schema.Number).annotations({ description: "Release year (range ops)." }),
   ),
 })
 type SeriesFilterValue = Schema.Schema.Type<typeof SeriesFilter>
@@ -337,26 +344,30 @@ const toEpisodeSummary = (episode: Episode): EpisodeSummary => ({
 })
 
 const EpisodeFilter = Schema.Struct({
-  "series.id": ScopeEq(Schema.Number).annotations({
+  "series.id": ScopeOperator(Schema.Number).annotations({
     description: "Series whose episodes to fetch (required; sent to Sonarr as seriesId).",
   }),
   "season.number": Schema.optional(
-    ScopeEq(Schema.Number).annotations({
+    ScopeOperator(Schema.Number).annotations({
       description: "Restrict to one season (sent to Sonarr as seasonNumber).",
     }),
   ),
   title: Schema.optional(
-    Text.annotations({ description: "Match the episode title (text operators)." }),
+    TextOperators.annotations({ description: "Match the episode title (text operators)." }),
   ),
   monitored: Schema.optional(
-    Bool.annotations({ description: "Whether the episode is monitored." }),
+    BooleanOperator.annotations({ description: "Whether the episode is monitored." }),
   ),
-  hasFile: Schema.optional(Bool.annotations({ description: "Whether a file is present." })),
+  hasFile: Schema.optional(
+    BooleanOperator.annotations({ description: "Whether a file is present." }),
+  ),
   missing: Schema.optional(
     Schema.Boolean.annotations({ description: "Convenience: monitored and without a file." }),
   ),
   airDate: Schema.optional(
-    Ord(Schema.String).annotations({ description: "Air date (UTC ISO) range operators." }),
+    OrderedOperators(Schema.String).annotations({
+      description: "Air date (UTC ISO) range operators.",
+    }),
   ),
   hasAired: Schema.optional(
     Schema.Boolean.annotations({ description: "Convenience: air date is in the past." }),

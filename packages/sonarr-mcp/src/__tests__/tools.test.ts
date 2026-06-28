@@ -11,7 +11,7 @@ import {
   listEpisodes,
   listSeries,
   SonarrToolkit,
-  type TextOp,
+  type TextOperatorsValue,
 } from "../tools.js"
 import { episodeFixture } from "./fixtures/episode.js"
 import { seriesFixture } from "./fixtures/series.js"
@@ -249,7 +249,7 @@ describe("list_series query surface", () => {
 
   // Library genres: Alpha [Drama, Crime], Bravo [Comedy], Charlie [Drama].
   it("filters genres with set semantics (existential positives, universal negatives)", async () => {
-    const byGenre = (genres: TextOp) =>
+    const byGenre = (genres: TextOperatorsValue) =>
       Effect.runPromise(run((s) => listSeries(s, { filter: { genres } }))).then(ids)
 
     expect(await byGenre({ contains: "drama" })).toEqual([1, 3])
