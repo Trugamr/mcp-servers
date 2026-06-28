@@ -154,6 +154,7 @@ describe("list_movies query surface", () => {
       hasFile: true,
       qualityProfileId: 1,
       studio: "HBO",
+      genres: ["Drama", "Crime"],
     }),
     makeMovie({
       id: 2,
@@ -164,6 +165,7 @@ describe("list_movies query surface", () => {
       hasFile: false,
       qualityProfileId: 2,
       studio: "Netflix",
+      genres: ["Comedy"],
     }),
     makeMovie({
       id: 3,
@@ -174,6 +176,7 @@ describe("list_movies query surface", () => {
       hasFile: false,
       qualityProfileId: 1,
       studio: "AMC",
+      genres: ["Drama"],
     }),
   ]
 
@@ -235,6 +238,24 @@ describe("list_movies query surface", () => {
     ).toEqual([2, 3])
   })
 
+  // Library genres: Alpha [Drama, Crime], Bravo [Comedy], Charlie [Drama].
+  it("filters genres with set semantics (existential positives, universal negatives)", async () => {
+    const byGenre = (genres: {
+      eq?: string
+      ne?: string
+      contains?: string
+      in?: ReadonlyArray<string>
+      nin?: ReadonlyArray<string>
+    }) => Effect.runPromise(run((r) => listMovies(r, { filter: { genres } }))).then(ids)
+
+    expect(await byGenre({ contains: "drama" })).toEqual([1, 3])
+    expect(await byGenre({ eq: "Comedy" })).toEqual([2])
+    expect(await byGenre({ in: ["Crime", "Comedy"] })).toEqual([1, 2])
+    // Negatives exclude any item carrying the genre — not "some other genre differs".
+    expect(await byGenre({ ne: "Drama" })).toEqual([2])
+    expect(await byGenre({ nin: ["Drama"] })).toEqual([2])
+  })
+
   it("sorts by year desc then title, and defaults to title ascending", async () => {
     const byYearDesc = await Effect.runPromise(
       run((r) => listMovies(r, { sort: [{ field: "year", order: "desc" }, { field: "title" }] })),
@@ -245,12 +266,14 @@ describe("list_movies query surface", () => {
     expect(defaultResult.items.map((item) => item.title)).toEqual(["Alpha", "Bravo", "Charlie"])
   })
 
-  it("projects lean summaries: drops overview/genres", async () => {
+  it("projects lean summaries: surfaces genres, drops overview", async () => {
     const result = await Effect.runPromise(run((r) => listMovies(r)))
     for (const item of result.items) {
       expect(item).not.toHaveProperty("overview")
-      expect(item).not.toHaveProperty("genres")
     }
+    // Default title-ascending order: [Alpha, Bravo, Charlie]; genres rides along for
+    // genre-aware filtering/selection.
+    expect(result.items[0]).toMatchObject({ genres: ["Drama", "Crime"] })
   })
 })
 

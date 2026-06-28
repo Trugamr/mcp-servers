@@ -81,6 +81,7 @@ const Text = Schema.Struct({
   ne: Schema.optional(Schema.String),
   contains: Schema.optional(Schema.String),
   in: Schema.optional(Schema.Array(Schema.String)),
+  nin: Schema.optional(Schema.Array(Schema.String)),
 })
 /** Boolean operator. */
 const Bool = Schema.Struct({ eq: Schema.optional(Schema.Boolean) })
@@ -120,7 +121,27 @@ const matchText = (value: string | null | undefined, operators?: TextOp) => {
       (Predicate.isUndefined(operators.ne) || text !== operators.ne) &&
       (Predicate.isUndefined(operators.contains) ||
         text.toLowerCase().includes(operators.contains.toLowerCase())) &&
-      (Predicate.isUndefined(operators.in) || operators.in.includes(text)))
+      (Predicate.isUndefined(operators.in) || operators.in.includes(text)) &&
+      (Predicate.isUndefined(operators.nin) || !operators.nin.includes(text)))
+  )
+}
+// Genres are multi-valued, so the operators apply with set semantics: positive
+// operators are existential (some genre satisfies them), negative operators are
+// universal (no genre violates them). An item with no genres satisfies only the
+// negative operators — it isn't excluded by `ne`/`nin`.
+const matchGenres = (values: ReadonlyArray<string> | undefined, operators?: TextOp) => {
+  const genres = values ?? []
+  const contains = operators?.contains
+  return (
+    !operators ||
+    ((Predicate.isUndefined(operators.eq) || genres.includes(operators.eq)) &&
+      (Predicate.isUndefined(operators.ne) || !genres.includes(operators.ne)) &&
+      (Predicate.isUndefined(contains) ||
+        genres.some((genre) => genre.toLowerCase().includes(contains.toLowerCase()))) &&
+      (Predicate.isUndefined(operators.in) ||
+        operators.in.some((genre) => genres.includes(genre))) &&
+      (Predicate.isUndefined(operators.nin) ||
+        !operators.nin.some((genre) => genres.includes(genre))))
   )
 }
 const matchBoolean = (value: boolean, operators?: BoolOp) =>
@@ -185,7 +206,7 @@ const pageByCursor = <A, B>(
 // ---- movie ----------------------------------------------------------------
 
 // Lean list projection: drop the heavy/low-signal fields (overview, sortTitle,
-// titleSlug, certification, genres, tags, runtime, …) and keep what identifies and
+// titleSlug, certification, tags, runtime, …) and keep what identifies and
 // ranks a movie. Derived from the SDK `Movie` so field types track the source.
 const MovieSummary = Movie.pick(
   "id",
@@ -197,6 +218,7 @@ const MovieSummary = Movie.pick(
   "qualityProfileId",
   "hasFile",
   "studio",
+  "genres",
   "path",
   "sizeOnDisk",
 )
@@ -212,6 +234,7 @@ const toMovieSummary = (m: Movie): MovieSummary => ({
   qualityProfileId: m.qualityProfileId,
   hasFile: m.hasFile,
   ...(Predicate.isNotUndefined(m.studio) && { studio: m.studio }),
+  ...(Predicate.isNotUndefined(m.genres) && { genres: m.genres }),
   ...(Predicate.isNotUndefined(m.path) && { path: m.path }),
   ...(Predicate.isNotUndefined(m.sizeOnDisk) && { sizeOnDisk: m.sizeOnDisk }),
 })
@@ -235,6 +258,12 @@ const MovieFilter = Schema.Struct({
     Eq(Schema.Number).annotations({ description: "Quality profile id." }),
   ),
   studio: Schema.optional(Text.annotations({ description: "Match the studio (text operators)." })),
+  genres: Schema.optional(
+    Text.annotations({
+      description:
+        "Match genres (set semantics), e.g. contains 'drama', in ['Drama'], nin ['Anime'].",
+    }),
+  ),
   year: Schema.optional(
     Ord(Schema.Number).annotations({ description: "Release year (range ops)." }),
   ),
@@ -255,6 +284,7 @@ const matchesMovie = (m: Movie, f: MovieFilterValue = {}) =>
   matchBoolean(m.hasFile, f.hasFile) &&
   matchEquality(m.qualityProfileId, f.qualityProfileId) &&
   matchText(m.studio, f.studio) &&
+  matchGenres(m.genres, f.genres) &&
   matchOrdered(m.year, f.year)
 
 const movieOrder = (sort: MovieSortValue = []) =>

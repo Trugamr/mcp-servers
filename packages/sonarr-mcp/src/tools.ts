@@ -84,6 +84,7 @@ const Text = Schema.Struct({
   ne: Schema.optional(Schema.String),
   contains: Schema.optional(Schema.String),
   in: Schema.optional(Schema.Array(Schema.String)),
+  nin: Schema.optional(Schema.Array(Schema.String)),
 })
 /** Boolean operator. */
 const Bool = Schema.Struct({ eq: Schema.optional(Schema.Boolean) })
@@ -129,7 +130,27 @@ const matchText = (value: string | null | undefined, operators?: TextOp) => {
       (Predicate.isUndefined(operators.ne) || text !== operators.ne) &&
       (Predicate.isUndefined(operators.contains) ||
         text.toLowerCase().includes(operators.contains.toLowerCase())) &&
-      (Predicate.isUndefined(operators.in) || operators.in.includes(text)))
+      (Predicate.isUndefined(operators.in) || operators.in.includes(text)) &&
+      (Predicate.isUndefined(operators.nin) || !operators.nin.includes(text)))
+  )
+}
+// Genres are multi-valued, so the operators apply with set semantics: positive
+// operators are existential (some genre satisfies them), negative operators are
+// universal (no genre violates them). An item with no genres satisfies only the
+// negative operators — it isn't excluded by `ne`/`nin`.
+const matchGenres = (values: ReadonlyArray<string> | undefined, operators?: TextOp) => {
+  const genres = values ?? []
+  const contains = operators?.contains
+  return (
+    !operators ||
+    ((Predicate.isUndefined(operators.eq) || genres.includes(operators.eq)) &&
+      (Predicate.isUndefined(operators.ne) || !genres.includes(operators.ne)) &&
+      (Predicate.isUndefined(contains) ||
+        genres.some((genre) => genre.toLowerCase().includes(contains.toLowerCase()))) &&
+      (Predicate.isUndefined(operators.in) ||
+        operators.in.some((genre) => genres.includes(genre))) &&
+      (Predicate.isUndefined(operators.nin) ||
+        !operators.nin.some((genre) => genres.includes(genre))))
   )
 }
 const matchBoolean = (value: boolean, operators?: BoolOp) =>
@@ -205,6 +226,7 @@ const SeriesSummary = Series.pick(
   "tvdbId",
   "qualityProfileId",
   "network",
+  "genres",
   "seriesType",
   "path",
   "statistics",
@@ -222,6 +244,7 @@ const toSeriesSummary = (s: Series): SeriesSummary => ({
   qualityProfileId: s.qualityProfileId,
   seriesType: s.seriesType,
   ...(Predicate.isNotUndefined(s.network) && { network: s.network }),
+  ...(Predicate.isNotUndefined(s.genres) && { genres: s.genres }),
   ...(Predicate.isNotUndefined(s.path) && { path: s.path }),
   ...(Predicate.isNotUndefined(s.statistics) && { statistics: s.statistics }),
   ...(Predicate.isNotUndefined(s.ratings) && { ratings: s.ratings }),
@@ -250,6 +273,12 @@ const SeriesFilter = Schema.Struct({
   network: Schema.optional(
     Text.annotations({ description: "Match the network (text operators)." }),
   ),
+  genres: Schema.optional(
+    Text.annotations({
+      description:
+        "Match genres (set semantics), e.g. contains 'drama', in ['Drama'], nin ['Anime'].",
+    }),
+  ),
   year: Schema.optional(
     Ord(Schema.Number).annotations({ description: "Release year (range ops)." }),
   ),
@@ -270,6 +299,7 @@ const matchesSeries = (s: Series, f: SeriesFilterValue = {}) =>
   matchBoolean(s.monitored, f.monitored) &&
   matchEquality(s.qualityProfileId, f.qualityProfileId) &&
   matchText(s.network, f.network) &&
+  matchGenres(s.genres, f.genres) &&
   matchOrdered(s.year, f.year)
 
 const seriesOrder = (sort: SeriesSortValue = []) =>
