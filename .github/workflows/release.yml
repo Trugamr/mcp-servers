@@ -22,8 +22,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate every release on the full check suite — the same jobs CI runs on PRs. The publish job
+  # depends on this, so lint/format/typecheck/build/unit and integration must all pass before
+  # anything reaches npm or GHCR.
+  checks:
+    name: Checks
+    uses: ./.github/workflows/checks.yml
+
   release:
     name: Version or publish
+    needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -37,19 +45,10 @@ jobs:
           # changesets/action pushes the version branch + tags, so it needs persisted credentials.
           fetch-depth: 0 # full history so changelog-github can resolve each changeset's commit/PR
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        # no version input — read from the "packageManager" field (pnpm@10.10.0)
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
         with:
-          node-version-file: .nvmrc # single source of truth (Node 24)
-          cache: pnpm # caches the pnpm store, keyed on pnpm-lock.yaml
           registry-url: https://registry.npmjs.org # writes an .npmrc that reads NODE_AUTH_TOKEN
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Create Version PR or publish release
         id: changesets

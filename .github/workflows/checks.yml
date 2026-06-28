@@ -1,0 +1,77 @@
+name: Checks
+
+# The single source of truth for "is this commit good?": lint, format, typecheck, build, unit +
+# integration tests, and workflow linting. Reusable so both gates call the exact same jobs:
+#   - ci.yml runs it on every pull request (advisory + branch-protection required checks)
+#   - release.yml runs it on main before publishing, so a red commit can't reach npm or GHCR
+on:
+  workflow_call:
+
+# Least-privilege: read-only GITHUB_TOKEN for every job.
+permissions:
+  contents: read
+
+# Turbo telemetry stays off for every job.
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+
+jobs:
+  checks:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15 # bound runaway/abusive jobs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Lint
+        run: pnpm lint # script carries --deny-warnings, so warnings fail
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Build
+        run: pnpm build # build first so consumers resolve built dist (not source)
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest # Docker is preinstalled, so Testcontainers works out of the box
+    timeout-minutes: 15 # bound runaway/abusive jobs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      # `test:integration` depends on `^build`, so Turbo builds upstream packages first.
+      - name: Integration tests
+        run: pnpm test:integration # boots real Sonarr/Radarr instances via Testcontainers
+
+  actionlint:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Run actionlint
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color

@@ -1,116 +1,21 @@
 name: CI
 
+# Run the full check suite on every pull request. These are the contexts branch protection requires
+# before a PR can merge. Pushes to main don't run here — release.yml runs the same checks.yml as a
+# publish gate, so a separate main run would be redundant.
 on:
   pull_request:
-  push:
-    branches: [main]
-
-# Least-privilege: read-only GITHUB_TOKEN for every run.
-permissions:
-  contents: read
 
 # Cancel superseded runs on the same ref to save minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only; checks.yml also declares its own least-privilege permissions.
+permissions:
+  contents: read
+
 jobs:
-  checks:
-    name: Lint, typecheck, test, build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15 # bound runaway/abusive jobs
-    env:
-      TURBO_TELEMETRY_DISABLED: "1"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        # no version input — read from the "packageManager" field (pnpm@10.10.0)
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc # single source of truth (Node 24)
-          cache: pnpm # caches the pnpm store, keyed on pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Cache turbo
-        uses: actions/cache@v6
-        with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-
-      - name: Lint
-        run: pnpm lint # script carries --deny-warnings, so warnings fail
-
-      - name: Format check
-        run: pnpm format:check
-
-      - name: Build
-        run: pnpm build # build first so consumers resolve built dist (not source)
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
-
-  integration:
-    name: Integration tests
-    runs-on: ubuntu-latest # Docker is preinstalled, so Testcontainers works out of the box
-    timeout-minutes: 15 # bound runaway/abusive jobs
-    env:
-      TURBO_TELEMETRY_DISABLED: "1"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        # no version input — read from the "packageManager" field (pnpm@10.10.0)
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc # single source of truth (Node 24)
-          cache: pnpm # caches the pnpm store, keyed on pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Cache turbo
-        uses: actions/cache@v6
-        with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-
-      # `test:integration` depends on `^build`, so Turbo builds upstream packages first.
-      - name: Integration tests
-        run: pnpm test:integration # boots real Sonarr/Radarr instances via Testcontainers
-
-  actionlint:
-    name: Lint workflows
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Run actionlint
-        uses: docker://rhysd/actionlint:1.7.12
-        with:
-          args: -color
+  ci:
+    name: Checks
+    uses: ./.github/workflows/checks.yml
