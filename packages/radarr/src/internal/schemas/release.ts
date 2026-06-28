@@ -11,6 +11,10 @@ import { Quality } from "./quality.js"
  * `title`. A caller filtering for "1080p hevc" reads `quality` for the resolution and
  * the `title` string for the codec. `seeders`/`leechers` are torrent-only and absent
  * for usenet. `size` is int64 bytes, modeled as a JS number (precise enough here).
+ *
+ * `downloadUrl` is intentionally NOT modeled: Radarr embeds an API key in it, and the
+ * grab path keys off `guid` + `indexerId`, so surfacing it would leak that secret into
+ * the caller's (and the agent's) context for no gain. `infoUrl` is a public details page.
  */
 export const Release = Schema.Struct({
   guid: Schema.String,
@@ -36,7 +40,6 @@ export const Release = Schema.Struct({
   downloadAllowed: Schema.optional(Schema.Boolean),
   publishDate: Schema.optional(Schema.String),
   infoUrl: optionalNullable(Schema.String),
-  downloadUrl: optionalNullable(Schema.String),
 })
 
 export type Release = Schema.Schema.Type<typeof Release>

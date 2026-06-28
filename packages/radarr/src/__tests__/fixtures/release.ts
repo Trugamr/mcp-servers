@@ -1,9 +1,10 @@
 /**
  * Two `GET /api/v3/release` candidates for one movie: a torrent (with seeders) and a
- * usenet release (no seeders — exercises `optionalNullable`). The nested `quality`
- * and the unmodeled `customFormats`/`revision` keys verify the schema decodes the
- * shape and drops what it doesn't model. Codec lives in `title`, not a structured
- * field — note the "x265 HEVC" vs "x264" difference an agent filters on.
+ * usenet release (no seeders — exercises `optionalNullable`). The nested `quality` and
+ * the unmodeled `customFormats`/`revision` keys — plus the secret-bearing `downloadUrl`
+ * (Radarr embeds an API key in it) — verify the schema decodes the shape and drops what
+ * it doesn't model. Codec lives in `title`, not a structured field — note the
+ * "x265 HEVC" vs "x264" difference an agent filters on.
  */
 export const releasesFixture = [
   {

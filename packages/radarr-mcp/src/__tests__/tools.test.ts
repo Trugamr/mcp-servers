@@ -98,6 +98,8 @@ describe("library + release tool handlers", () => {
     expect(url?.searchParams.get("movieId")).toBe("123")
     expect(items).toHaveLength(2)
     expect(items[0]).toMatchObject({ guid: "https://indexer.test/abc", indexerId: 2 })
+    // downloadUrl embeds an API key; it must never reach the model's context.
+    expect(items[0]).not.toHaveProperty("downloadUrl")
   })
 
   it("grab_release posts guid + indexerId and echoes a confirmation with the title", async () => {
