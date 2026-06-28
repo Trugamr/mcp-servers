@@ -1,1 +1,2 @@
-24
+24.16.0
+# Pinned: Node >=24.17.0 breaks node-fetch keep-alive (nodejs/node#63989). Revert to 24 once fixed.
