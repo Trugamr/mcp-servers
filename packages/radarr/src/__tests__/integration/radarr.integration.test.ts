@@ -1,4 +1,9 @@
-import { RADARR_VERSION, type SeededMovie, seedMovie } from "@trugamr/testkit/radarr"
+import {
+  MOVIE_ROOT_FOLDER,
+  RADARR_VERSION,
+  type SeededMovie,
+  seedMovie,
+} from "@trugamr/testkit/radarr"
 import { beforeAll, describe, expect, it } from "vitest"
 import { RadarrResponseError } from "../../effect.js"
 import { failureOf, runExit, successOf } from "./helpers.js"
@@ -68,6 +73,55 @@ describe("Radarr SDK against a pinned Radarr instance", () => {
       const page = successOf(await runExit((radarr) => radarr.queue.list))
 
       expect(page).toMatchObject({ records: [], totalRecords: 0 })
+    })
+  })
+
+  describe("quality profile + root folder reads", () => {
+    it("lists the default quality profiles Radarr ships", async () => {
+      const profiles = successOf(await runExit((radarr) => radarr.qualityProfile.list))
+
+      expect(profiles.length).toBeGreaterThan(0)
+      expect(typeof profiles[0]?.name).toBe("string")
+    })
+
+    it("lists the seeded root folder", async () => {
+      const folders = successOf(await runExit((radarr) => radarr.rootFolder.list))
+
+      expect(folders.some((folder) => folder.path === MOVIE_ROOT_FOLDER)).toBe(true)
+    })
+  })
+
+  describe("movie lookup + add round-trip", () => {
+    // A second film (Fight Club, tmdb 550) distinct from the seeded one, so the add
+    // can't collide with an existing library entry.
+    it("looks up a film by term against the metadata provider", async () => {
+      const results = successOf(await runExit((radarr) => radarr.movie.lookup("Fight Club 1999")))
+      const match = results.find((entry) => entry.tmdbId === 550)
+
+      // Not in the library at this point, so Radarr omits the library id.
+      expect(match).toMatchObject({ title: "Fight Club", year: 1999 })
+      expect(match).not.toHaveProperty("id")
+    })
+
+    it("adds a movie by tmdbId, then removes it", async () => {
+      const added = successOf(
+        await runExit((radarr) =>
+          radarr.movie.add({
+            tmdbId: 550,
+            qualityProfileId: 1,
+            rootFolderPath: MOVIE_ROOT_FOLDER,
+          }),
+        ),
+      )
+      expect(added).toMatchObject({ tmdbId: 550, title: "Fight Club" })
+
+      const removed = successOf(
+        await runExit((radarr) => radarr.movie.remove(added.id, { deleteFiles: false })),
+      )
+      expect(removed).toBeUndefined()
+
+      const movies = successOf(await runExit((radarr) => radarr.movie.list))
+      expect(movies.some((entry) => entry.id === added.id)).toBe(false)
     })
   })
 })

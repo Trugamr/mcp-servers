@@ -1,6 +1,12 @@
 import { McpSchema } from "@effect/ai"
 import { callMcp } from "@trugamr/testkit/mcp"
-import { injectRadarr, RADARR_VERSION, type SeededMovie, seedMovie } from "@trugamr/testkit/radarr"
+import {
+  injectRadarr,
+  MOVIE_ROOT_FOLDER,
+  RADARR_VERSION,
+  type SeededMovie,
+  seedMovie,
+} from "@trugamr/testkit/radarr"
 import { ConfigProvider, Effect, Exit, Layer, Schema, Scope } from "effect"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { httpServerLive } from "../../server.js"
@@ -101,6 +107,68 @@ describe("radarr-mcp tools over Streamable HTTP, against a live Radarr", () => {
     expect(result.isError).toBe(true)
     // Failures encode the typed ToolError ({ _tag, message }) under structuredContent,
     // the same channel successes use — so assert on the tag, not a substring.
+    expect(result.structuredContent).toMatchObject({ _tag: "RadarrResponseError" })
+  })
+
+  it("list_quality_profiles returns the default profiles as lean id + name items", async () => {
+    const result = await callTool("list_quality_profiles", {})
+
+    expect(result.isError ?? false).toBe(false)
+    const items = itemsOf<Record<string, unknown>>(result.structuredContent)
+    expect(items.length).toBeGreaterThan(0)
+    // The lean projection returns just id + name, dropping the profile's quality list.
+    expect(items[0]).toMatchObject({ id: expect.any(Number), name: expect.any(String) })
+    expect(items[0]).not.toHaveProperty("items")
+  })
+
+  it("list_root_folders includes the seeded root folder", async () => {
+    const result = await callTool("list_root_folders", {})
+
+    expect(result.isError ?? false).toBe(false)
+    const items = itemsOf<{ readonly path?: string }>(result.structuredContent)
+    expect(items.some((folder) => folder.path === MOVIE_ROOT_FOLDER)).toBe(true)
+  })
+
+  it("lookup_movie finds a film by term, returning its projected fields", async () => {
+    const result = await callTool("lookup_movie", { term: "Fight Club 1999" })
+
+    expect(result.isError ?? false).toBe(false)
+    const items = itemsOf<Record<string, unknown>>(result.structuredContent)
+    const match = items.find((entry) => entry.tmdbId === 550)
+    // Not in the library here, so Radarr omits the library id — the projection keeps it absent.
+    expect(match).toMatchObject({
+      tmdbId: 550,
+      title: "Fight Club",
+      year: 1999,
+      status: "released",
+    })
+    expect(match).not.toHaveProperty("id")
+  })
+
+  it("add_movie then remove_movie round-trips a film through the library", async () => {
+    // Fight Club (tmdb 550), distinct from the seeded film, so the add can't collide.
+    const added = await callTool("add_movie", {
+      tmdbId: 550,
+      qualityProfileId: 1,
+      rootFolderPath: MOVIE_ROOT_FOLDER,
+    })
+    expect(added.isError ?? false).toBe(false)
+    const movie = added.structuredContent as { readonly id: number; readonly tmdbId: number }
+    expect(movie).toMatchObject({ tmdbId: 550 })
+
+    const removed = await callTool("remove_movie", { id: movie.id })
+    expect(removed.isError ?? false).toBe(false)
+    expect(removed.structuredContent).toEqual({ id: movie.id })
+  })
+
+  it("reports a typed tool error when adding an unknown tmdbId (isError over the wire)", async () => {
+    const result = await callTool("add_movie", {
+      tmdbId: 999_999_999,
+      qualityProfileId: 1,
+      rootFolderPath: MOVIE_ROOT_FOLDER,
+    })
+
+    expect(result.isError).toBe(true)
     expect(result.structuredContent).toMatchObject({ _tag: "RadarrResponseError" })
   })
 })

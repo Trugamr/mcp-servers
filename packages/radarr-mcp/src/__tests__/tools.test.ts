@@ -4,17 +4,25 @@ import { http, HttpResponse } from "msw"
 import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import {
+  addMovie,
   getSystemStatus,
   grabRelease,
   listMovies,
+  listQualityProfiles,
   listQueue,
+  listRootFolders,
+  lookupMovie,
   RadarrToolkit,
+  removeMovie,
   searchReleases,
   type TextOperatorsValue,
 } from "../tools.js"
 import { movieFixture } from "./fixtures/movie.js"
+import { movieLookupFixture, movieLookupTmdbFixture } from "./fixtures/movie-lookup.js"
+import { qualityProfilesFixture } from "./fixtures/quality-profile.js"
 import { queuePageFixture } from "./fixtures/queue.js"
 import { releasesFixture } from "./fixtures/release.js"
+import { rootFoldersFixture } from "./fixtures/root-folder.js"
 import { systemStatusFixture } from "./fixtures/system-status.js"
 
 const baseUrl = "http://radarr.test"
@@ -67,7 +75,11 @@ describe("library + release tool handlers", () => {
 
     const { items } = await Effect.runPromise(run((radarr) => listMovies(radarr)))
 
-    expect(items[0]).toMatchObject({ title: movieFixture.title, tmdbId: movieFixture.tmdbId })
+    expect(items[0]).toMatchObject({
+      title: movieFixture.title,
+      tmdbId: movieFixture.tmdbId,
+      imdbId: movieFixture.imdbId,
+    })
   })
 
   it("search_releases forwards movieId and returns candidates carrying guid + indexerId", async () => {
@@ -130,6 +142,123 @@ describe("library + release tool handlers", () => {
     server.use(http.get(apiUrl("/movie"), () => new HttpResponse(null, { status: 401 })))
 
     const exit = await Effect.runPromiseExit(run((radarr) => listMovies(radarr)))
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    const failure = Exit.isFailure(exit) ? Cause.failureOption(exit.cause) : Option.none()
+    expect(Option.getOrThrow(failure)).toEqual({
+      _tag: "RadarrResponseError",
+      message: "Radarr returned HTTP 401",
+    })
+  })
+})
+
+describe("add-funnel tool handlers", () => {
+  it("lookup_movie returns candidates wrapped as items, carrying tmdbId and the library id", async () => {
+    let url: URL | undefined
+    server.use(
+      http.get(apiUrl("/movie/lookup"), ({ request }) => {
+        url = new URL(request.url)
+        return HttpResponse.json(movieLookupFixture)
+      }),
+    )
+
+    const { items } = await Effect.runPromise(run((r) => lookupMovie(r, "fight club")))
+
+    expect(url?.searchParams.get("term")).toBe("fight club")
+    // A missing id tells the agent the candidate isn't in the library yet; an existing
+    // entry carries its library id. status + runtime ride along for the add decision.
+    expect(items[0]).toMatchObject({
+      tmdbId: 550,
+      title: "Fight Club",
+      year: 1999,
+      status: "released",
+      runtime: 139,
+    })
+    expect(items[0]).not.toHaveProperty("id")
+    expect(items[1]).toMatchObject({ id: 77, tmdbId: 1700 })
+    // Lean projection drops the heavy fields the lookup carries.
+    expect(items[0]).not.toHaveProperty("images")
+    expect(items[0]).not.toHaveProperty("titleSlug")
+  })
+
+  it("add_movie looks up by tmdbId, posts the merged body, and returns a lean movie summary", async () => {
+    let lookupUrl: URL | undefined
+    let body: Record<string, unknown> | undefined
+    server.use(
+      http.get(apiUrl("/movie/lookup/tmdb"), ({ request }) => {
+        lookupUrl = new URL(request.url)
+        return HttpResponse.json(movieLookupTmdbFixture)
+      }),
+      http.post(apiUrl("/movie"), async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ ...movieFixture, id: 7, tmdbId: 550, title: "Fight Club" })
+      }),
+    )
+
+    const result = await Effect.runPromise(
+      run((r) => addMovie(r, { tmdbId: 550, qualityProfileId: 4, rootFolderPath: "/movies" })),
+    )
+
+    expect(lookupUrl?.searchParams.get("tmdbId")).toBe("550")
+    // The looked-up resource is spread, then the add fields layer over it; the add
+    // never starts a release search.
+    expect(body).toMatchObject({
+      tmdbId: 550,
+      title: "Fight Club",
+      titleSlug: "fight-club-550",
+      qualityProfileId: 4,
+      rootFolderPath: "/movies",
+      monitored: true,
+      minimumAvailability: "released",
+      addOptions: { searchForMovie: false },
+    })
+    // The created movie comes back as the lean MovieSummary (no overview).
+    expect(result).toMatchObject({ id: 7, tmdbId: 550, title: "Fight Club" })
+    expect(result).not.toHaveProperty("overview")
+  })
+
+  it("remove_movie issues a DELETE with the flags and echoes the removed id", async () => {
+    let url: URL | undefined
+    server.use(
+      http.delete(apiUrl("/movie/7"), ({ request }) => {
+        url = new URL(request.url)
+        return new HttpResponse(null, { status: 200 })
+      }),
+    )
+
+    const result = await Effect.runPromise(run((r) => removeMovie(r, { id: 7, deleteFiles: true })))
+
+    expect(url?.searchParams.get("deleteFiles")).toBe("true")
+    expect(result).toEqual({ id: 7 })
+  })
+
+  it("list_quality_profiles returns lean id + name items", async () => {
+    server.use(http.get(apiUrl("/qualityprofile"), () => HttpResponse.json(qualityProfilesFixture)))
+
+    const { items } = await Effect.runPromise(run((r) => listQualityProfiles(r)))
+
+    expect(items).toEqual([
+      { id: 1, name: "Any" },
+      { id: 4, name: "HD-1080p" },
+    ])
+  })
+
+  it("list_root_folders returns the folders wrapped as items", async () => {
+    server.use(http.get(apiUrl("/rootfolder"), () => HttpResponse.json(rootFoldersFixture)))
+
+    const { items } = await Effect.runPromise(run((r) => listRootFolders(r)))
+
+    expect(items[0]).toMatchObject({ id: 1, path: "/movies", accessible: true })
+  })
+
+  it("maps a RadarrError into the tool-error shape (lookup 401 on add_movie)", async () => {
+    server.use(
+      http.get(apiUrl("/movie/lookup/tmdb"), () => new HttpResponse(null, { status: 401 })),
+    )
+
+    const exit = await Effect.runPromiseExit(
+      run((r) => addMovie(r, { tmdbId: 550, qualityProfileId: 1, rootFolderPath: "/movies" })),
+    )
 
     expect(Exit.isFailure(exit)).toBe(true)
     const failure = Exit.isFailure(exit) ? Cause.failureOption(exit.cause) : Option.none()
