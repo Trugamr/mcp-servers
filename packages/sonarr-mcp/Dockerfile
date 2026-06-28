@@ -5,11 +5,13 @@
 #
 #   docker build -f packages/sonarr-mcp/Dockerfile -t sonarr-mcp .
 
-# Every stage shares one base — Alpine (musl) for both build and run — so there
-# is no glibc/musl boundary between where the artifact is produced and where it
-# runs. Turbo's and Rolldown's prebuilt binaries both ship musl variants, so the
-# build works here too.
-FROM node:24-alpine AS build-base
+# Both build and runtime use Alpine (musl), so there's no glibc/musl boundary between
+# where the artifact is produced and where it runs, and Turbo's and Rolldown's prebuilt
+# binaries both ship musl variants. The build stage is pinned to Node 24.16 because the
+# floating `24` tag is now >=24.17.0, which has a keep-alive regression that breaks
+# build/release tooling (nodejs/node#63989); the runtime stays on the latest secure 24.x.
+# Unpin once Node ships the fix.
+FROM node:24.16-alpine AS build-base
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0
