@@ -42,9 +42,20 @@ The `Movie` schema models a lean identify-and-reason-about field set; `Schema.St
 
 ## Quality Profile
 
-- [x] `GET /qualityprofile` — list quality profiles — `qualityProfile.list` → `list_quality_profiles` (so a caller can pick a profile id for `add_movie`)
-- [ ] `GET /qualityprofile/{id}` — get one profile
-- [ ] `POST` / `PUT` / `DELETE /qualityprofile` — manage profiles
+A profile is modeled faithfully enough to clone and re-send: its quality `items` tree (single qualities and named groups), `cutoff`, the `minFormatScore`/`cutoffFormatScore`/`minUpgradeFormatScore` thresholds, `formatItems` scores, and `language`. There is no `/qualityprofile/schema` endpoint, so a create is built by cloning an existing profile (`get_quality_profile`), dropping its id, and adjusting it. An update fetches the current resource, overlays the patch, and PUTs it back, so unmodeled and unspecified fields survive.
+
+- [x] `GET /qualityprofile` — list quality profiles (lean id + name) — `qualityProfile.list` → `list_quality_profiles` (so a caller can pick a profile id for `add_movie`)
+- [x] `GET /qualityprofile/{id}` — get one profile in full — `qualityProfile.get` → `get_quality_profile`
+- [x] `POST /qualityprofile` — create a profile from a full body — `qualityProfile.create` → `create_quality_profile`
+- [x] `PUT /qualityprofile/{id}` — update a profile (fetch-merge-put) — `qualityProfile.update` → `update_quality_profile`
+- [x] `DELETE /qualityprofile/{id}` — delete a profile — `qualityProfile.remove` → `delete_quality_profile`
+
+## Language
+
+Radarr's language list is fixed (read-only); a quality profile's `language` references one by id.
+
+- [x] `GET /language` — list languages — `language.list` → `list_languages`
+- [x] `GET /language/{id}` — get one language — `language.get` (SDK only; no tool yet)
 
 ## Root Folder
 

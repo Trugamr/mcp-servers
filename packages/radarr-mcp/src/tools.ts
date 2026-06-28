@@ -1,9 +1,12 @@
 import { Tool, Toolkit } from "@effect/ai"
 import {
   type AddMovie,
+  Language,
   Movie,
   MovieLookup,
   QualityProfile,
+  QualityProfileInput,
+  QualityProfilePatch,
   QueueItem,
   Radarr,
   type RadarrError,
@@ -32,8 +35,8 @@ const GrabResult = Schema.Struct({
   title: Schema.optional(Schema.String),
 })
 
-/** Confirmation echoed back after a remove — the SDK call is void, so the removed id stands in. */
-const RemovedMovie = Schema.Struct({ id: Schema.Number })
+/** Confirmation echoed back after a delete/remove — the SDK call is void, so the id stands in. */
+const DeletedResource = Schema.Struct({ id: Schema.Number })
 
 /**
  * Surface a typed `RadarrError` as a JSON-serializable tool error. The message is
@@ -60,6 +63,10 @@ const grabHints = hints({ readonly: false, destructive: false, openWorld: true }
 // Add reaches Radarr's metadata provider to resolve the movie; remove stays local.
 const addHints = hints({ readonly: false, destructive: false, openWorld: true })
 const removeHints = hints({ readonly: false, destructive: true, openWorld: false })
+// Config writes stay on the configured instance; a delete removes a resource Radarr
+// (and the movies referencing it) may depend on, so it's marked destructive.
+const writeHints = hints({ readonly: false, destructive: false, openWorld: false })
+const deleteHints = hints({ readonly: false, destructive: true, openWorld: false })
 
 // Structured query surface for the list tools: filter / sort / paginate, applied
 // client-side because Radarr's `/movie`, `/release`, and `/queue` reads return flat
@@ -658,7 +665,7 @@ const RemoveMovie = Tool.make("remove_movie", {
       }),
     ),
   },
-  success: RemovedMovie,
+  success: DeletedResource,
   failure: ToolError,
 }).annotateContext(removeHints)
 
@@ -667,6 +674,54 @@ const ListQualityProfiles = Tool.make("list_quality_profiles", {
     "List the Radarr quality profiles (id + name) to pick one for add_movie. Note HEVC/x265 " +
     "isn't a profile field — codec is chosen at grab time via the release title.",
   success: ListResult(QualityProfileSummary),
+  failure: ToolError,
+}).annotateContext(readonlyHints)
+
+const GetQualityProfile = Tool.make("get_quality_profile", {
+  description:
+    "Get one Radarr quality profile in full by id — its quality items tree, cutoff, format-score " +
+    "rules, and language. Returns enough to clone, adjust, and re-send via create_quality_profile " +
+    "or update_quality_profile.",
+  parameters: { id: Schema.Number },
+  success: QualityProfile,
+  failure: ToolError,
+}).annotateContext(readonlyHints)
+
+const CreateQualityProfile = Tool.make("create_quality_profile", {
+  description:
+    "Create a quality profile. There is no schema endpoint, so build `profile` by cloning an " +
+    "existing one (get_quality_profile), dropping its id, and adjusting fields. `cutoff` must be " +
+    "the id of an allowed item; `language` comes from list_languages and each " +
+    "`formatItems[].format` from list_custom_formats. Returns the created profile.",
+  parameters: { profile: QualityProfileInput },
+  success: QualityProfile,
+  failure: ToolError,
+}).annotateContext(writeHints)
+
+const UpdateQualityProfile = Tool.make("update_quality_profile", {
+  description:
+    "Update a quality profile by id. Put only the fields to change in `profile`; unspecified " +
+    "fields keep their current values. Array fields (items, formatItems) replace wholesale when " +
+    "given. Returns the updated profile.",
+  parameters: { id: Schema.Number, profile: QualityProfilePatch },
+  success: QualityProfile,
+  failure: ToolError,
+}).annotateContext(writeHints)
+
+const DeleteQualityProfile = Tool.make("delete_quality_profile", {
+  description:
+    "Delete a quality profile by id. Movies using it must be moved to another profile first, or " +
+    "Radarr rejects the delete. Echoes the deleted id.",
+  parameters: { id: Schema.Number },
+  success: DeletedResource,
+  failure: ToolError,
+}).annotateContext(deleteHints)
+
+const ListLanguages = Tool.make("list_languages", {
+  description:
+    "List Radarr's available languages (id + name). Use an id to set a quality profile's language " +
+    "via create_quality_profile or update_quality_profile.",
+  success: ListResult(Language),
   failure: ToolError,
 }).annotateContext(readonlyHints)
 
@@ -688,6 +743,11 @@ export const RadarrToolkit = Toolkit.make(
   GrabRelease,
   ListQueue,
   ListQualityProfiles,
+  GetQualityProfile,
+  CreateQualityProfile,
+  UpdateQualityProfile,
+  DeleteQualityProfile,
+  ListLanguages,
   ListRootFolders,
 )
 
@@ -745,6 +805,11 @@ export interface MovieRemoveArguments {
   readonly addImportListExclusion?: boolean | undefined
 }
 
+export interface QualityProfileUpdateArguments {
+  readonly id: number
+  readonly profile: QualityProfilePatch
+}
+
 export const getSystemStatus = (radarr: RadarrService) => handle(radarr.system.getStatus)
 
 export const listMovies = (radarr: RadarrService, p: MovieListArguments = {}) =>
@@ -780,6 +845,21 @@ export const removeMovie = (radarr: RadarrService, input: MovieRemoveArguments) 
 
 export const listQualityProfiles = (radarr: RadarrService) =>
   handleListProjected(radarr.qualityProfile.list, toQualityProfileSummary)
+
+export const getQualityProfile = (radarr: RadarrService, id: number) =>
+  handle(radarr.qualityProfile.get(id))
+
+export const createQualityProfile = (radarr: RadarrService, profile: QualityProfileInput) =>
+  handle(radarr.qualityProfile.create(profile))
+
+export const updateQualityProfile = (radarr: RadarrService, input: QualityProfileUpdateArguments) =>
+  handle(radarr.qualityProfile.update(input.id, input.profile))
+
+/** Delete a quality profile, echoing the id back since the SDK call is void. */
+export const deleteQualityProfile = (radarr: RadarrService, id: number) =>
+  handle(radarr.qualityProfile.remove(id).pipe(Effect.as({ id })))
+
+export const listLanguages = (radarr: RadarrService) => handleList(radarr.language.list)
 
 export const listRootFolders = (radarr: RadarrService) => handleList(radarr.rootFolder.list)
 
@@ -843,6 +923,11 @@ export const RadarrToolkitLive = RadarrToolkit.toLayer(
       grab_release: (input) => grabRelease(radarr, input),
       list_queue: (parameters) => listQueue(radarr, parameters),
       list_quality_profiles: () => listQualityProfiles(radarr),
+      get_quality_profile: ({ id }) => getQualityProfile(radarr, id),
+      create_quality_profile: ({ profile }) => createQualityProfile(radarr, profile),
+      update_quality_profile: (input) => updateQualityProfile(radarr, input),
+      delete_quality_profile: ({ id }) => deleteQualityProfile(radarr, id),
+      list_languages: () => listLanguages(radarr),
       list_root_folders: () => listRootFolders(radarr),
     }
   }),

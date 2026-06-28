@@ -10,10 +10,15 @@ export type { RadarrService, RadarrV3Api } from "./internal/client.js"
 export type { RadarrConfigInput } from "./internal/config.js"
 export type { AddMovie } from "./internal/movie.js"
 export type { ReleaseGrab } from "./internal/release.js"
+export { Language } from "./internal/schemas/language.js"
 export { Movie } from "./internal/schemas/movie.js"
 export { MovieLookup } from "./internal/schemas/movie-lookup.js"
 export { Quality } from "./internal/schemas/quality.js"
-export { QualityProfile } from "./internal/schemas/quality-profile.js"
+export {
+  QualityProfile,
+  QualityProfileInput,
+  QualityProfilePatch,
+} from "./internal/schemas/quality-profile.js"
 export { QueueItem, QueuePage } from "./internal/schemas/queue.js"
 export { Release } from "./internal/schemas/release.js"
 export { RootFolder } from "./internal/schemas/root-folder.js"

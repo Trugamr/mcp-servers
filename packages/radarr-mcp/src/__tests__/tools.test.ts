@@ -5,8 +5,12 @@ import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import {
   addMovie,
+  createQualityProfile,
+  deleteQualityProfile,
+  getQualityProfile,
   getSystemStatus,
   grabRelease,
+  listLanguages,
   listMovies,
   listQualityProfiles,
   listQueue,
@@ -18,7 +22,9 @@ import {
   type ReleaseSearchArguments,
   removeMovie,
   searchReleases,
+  updateQualityProfile,
 } from "../tools.js"
+import { languagesFixture } from "./fixtures/language.js"
 import { movieFixture } from "./fixtures/movie.js"
 import { movieLookupFixture, movieLookupTmdbFixture } from "./fixtures/movie-lookup.js"
 import { qualityProfilesFixture } from "./fixtures/quality-profile.js"
@@ -272,6 +278,89 @@ describe("add-funnel tool handlers", () => {
       _tag: "RadarrResponseError",
       message: "Radarr returned HTTP 401",
     })
+  })
+})
+
+describe("quality profile + language config tool handlers", () => {
+  const profileUrl = apiUrl("/qualityprofile")
+
+  it("get_quality_profile returns the full profile by id", async () => {
+    server.use(http.get(`${profileUrl}/4`, () => HttpResponse.json(qualityProfilesFixture[1])))
+
+    const profile = await Effect.runPromise(run((r) => getQualityProfile(r, 4)))
+
+    expect(profile).toMatchObject({
+      id: 4,
+      name: "HD-1080p",
+      cutoff: 7,
+      language: { id: 1, name: "English" },
+      formatItems: [{ format: 2, score: 0 }],
+    })
+  })
+
+  it("create_quality_profile posts the body and returns the created profile", async () => {
+    let body: Record<string, unknown> | undefined
+    server.use(
+      http.post(profileUrl, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ ...qualityProfilesFixture[1], id: 9, name: "Custom" })
+      }),
+    )
+
+    const created = await Effect.runPromise(
+      run((r) =>
+        createQualityProfile(r, {
+          name: "Custom",
+          upgradeAllowed: true,
+          cutoff: 7,
+          minFormatScore: 0,
+          cutoffFormatScore: 0,
+          items: [{ quality: { id: 7, name: "Bluray-1080p" }, allowed: true }],
+        }),
+      ),
+    )
+
+    expect(body).toMatchObject({ name: "Custom", cutoff: 7 })
+    expect(created).toMatchObject({ id: 9, name: "Custom" })
+  })
+
+  it("update_quality_profile merges the patch over the fetched profile, preserving fields", async () => {
+    let body: Record<string, unknown> | undefined
+    server.use(
+      // The GET carries an unmodeled `appProfileId` the typed schema doesn't know about.
+      http.get(`${profileUrl}/4`, () =>
+        HttpResponse.json({ ...qualityProfilesFixture[1], appProfileId: 1 }),
+      ),
+      http.put(`${profileUrl}/4`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ ...qualityProfilesFixture[1], upgradeAllowed: false })
+      }),
+    )
+
+    const updated = await Effect.runPromise(
+      run((r) => updateQualityProfile(r, { id: 4, profile: { upgradeAllowed: false } })),
+    )
+
+    // The PUT body overlays the patch onto the full fetched resource — id, the untouched
+    // cutoff, and the unmodeled appProfileId all survive.
+    expect(body).toMatchObject({ id: 4, upgradeAllowed: false, cutoff: 7, appProfileId: 1 })
+    expect(updated.upgradeAllowed).toBe(false)
+  })
+
+  it("delete_quality_profile echoes the deleted id", async () => {
+    server.use(http.delete(`${profileUrl}/4`, () => new HttpResponse(null, { status: 200 })))
+
+    const result = await Effect.runPromise(run((r) => deleteQualityProfile(r, 4)))
+
+    expect(result).toEqual({ id: 4 })
+  })
+
+  it("list_languages returns the languages wrapped as items", async () => {
+    server.use(http.get(apiUrl("/language"), () => HttpResponse.json(languagesFixture)))
+
+    const { items } = await Effect.runPromise(run((r) => listLanguages(r)))
+
+    expect(items).toContainEqual({ id: 1, name: "English" })
   })
 })
 

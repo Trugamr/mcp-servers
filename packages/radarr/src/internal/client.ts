@@ -1,6 +1,7 @@
 import { Context, type Effect, Layer } from "effect"
 import { decodeConfig, type RadarrConfig, type RadarrConfigInput } from "./config.js"
 import type { RadarrError } from "./errors.js"
+import * as language from "./language.js"
 import * as movie from "./movie.js"
 import type { AddMovie, RemoveMovieOptions } from "./movie.js"
 import * as qualityProfile from "./quality-profile.js"
@@ -8,9 +9,14 @@ import * as queue from "./queue.js"
 import * as release from "./release.js"
 import type { ReleaseGrab } from "./release.js"
 import * as rootFolder from "./root-folder.js"
+import type { Language } from "./schemas/language.js"
 import type { Movie } from "./schemas/movie.js"
 import type { MovieLookup } from "./schemas/movie-lookup.js"
-import type { QualityProfile } from "./schemas/quality-profile.js"
+import type {
+  QualityProfile,
+  QualityProfileInput,
+  QualityProfilePatch,
+} from "./schemas/quality-profile.js"
 import type { QueuePage } from "./schemas/queue.js"
 import type { Release } from "./schemas/release.js"
 import type { RootFolder } from "./schemas/root-folder.js"
@@ -38,6 +44,17 @@ export interface RadarrV3Api {
   }
   readonly qualityProfile: {
     readonly list: Effect.Effect<ReadonlyArray<QualityProfile>, RadarrError>
+    readonly get: (id: number) => Effect.Effect<QualityProfile, RadarrError>
+    readonly create: (body: QualityProfileInput) => Effect.Effect<QualityProfile, RadarrError>
+    readonly update: (
+      id: number,
+      patch: QualityProfilePatch,
+    ) => Effect.Effect<QualityProfile, RadarrError>
+    readonly remove: (id: number) => Effect.Effect<void, RadarrError>
+  }
+  readonly language: {
+    readonly list: Effect.Effect<ReadonlyArray<Language>, RadarrError>
+    readonly get: (id: number) => Effect.Effect<Language, RadarrError>
   }
   readonly rootFolder: {
     readonly list: Effect.Effect<ReadonlyArray<RootFolder>, RadarrError>
@@ -73,6 +90,14 @@ const makeV3 = (config: RadarrConfig): RadarrV3Api => ({
   },
   qualityProfile: {
     list: qualityProfile.list(config),
+    get: (id) => qualityProfile.get(config, id),
+    create: (body) => qualityProfile.create(config, body),
+    update: (id, patch) => qualityProfile.update(config, id, patch),
+    remove: (id) => qualityProfile.remove(config, id),
+  },
+  language: {
+    list: language.list(config),
+    get: (id) => language.get(config, id),
   },
   rootFolder: {
     list: rootFolder.list(config),
