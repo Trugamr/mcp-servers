@@ -554,12 +554,15 @@ const SearchReleases = Tool.make("search_releases", {
 const GrabRelease = Tool.make("grab_release", {
   description:
     "Grab a release found by search_releases (identified by its guid + indexerId) and hand it to " +
-    "the download client; it then appears in list_queue. Pass title only to echo it back in the " +
-    "confirmation.",
+    "the download client; it then appears in list_queue.",
   parameters: {
     guid: Schema.String,
     indexerId: Schema.Number,
-    title: Schema.optional(Schema.String),
+    title: Schema.optional(
+      Schema.String.annotations({
+        description: "The release title, echoed back in the confirmation. Optional.",
+      }),
+    ),
   },
   success: GrabResult,
   failure: ToolError,
@@ -599,22 +602,40 @@ const AddMovie = Tool.make("add_movie", {
     tmdbId: Schema.Number,
     qualityProfileId: Schema.Number,
     rootFolderPath: Schema.String,
-    monitored: Schema.optional(Schema.Boolean),
-    minimumAvailability: Schema.optional(Schema.String),
+    monitored: Schema.optional(
+      Schema.Boolean.annotations({
+        description:
+          "Whether Radarr monitors the movie for releases. Defaults to true (monitored) when omitted.",
+      }),
+    ),
+    minimumAvailability: Schema.optional(
+      Schema.String.annotations({
+        description:
+          'Earliest point Radarr treats the movie as available to search: "tba", "announced", ' +
+          '"inCinemas", or "released". Defaults to "released" when omitted.',
+      }),
+    ),
   },
   success: MovieSummary,
   failure: ToolError,
 }).annotateContext(addHints)
 
 const RemoveMovie = Tool.make("remove_movie", {
-  description:
-    "Remove a movie from the library by its Radarr movie id. Set deleteFiles to also delete its " +
-    "files on disk, and addImportListExclusion to keep an import list from re-adding it. Echoes " +
-    "the removed id.",
+  description: "Remove a movie from the library by its Radarr movie id. Echoes the removed id.",
   parameters: {
     id: Schema.Number,
-    deleteFiles: Schema.optional(Schema.Boolean),
-    addImportListExclusion: Schema.optional(Schema.Boolean),
+    deleteFiles: Schema.optional(
+      Schema.Boolean.annotations({
+        description:
+          "Whether to also delete the movie's files on disk. Defaults to false (keep the files) when omitted.",
+      }),
+    ),
+    addImportListExclusion: Schema.optional(
+      Schema.Boolean.annotations({
+        description:
+          "Whether to add an import list exclusion so a list doesn't re-add the movie. Defaults to false when omitted.",
+      }),
+    ),
   },
   success: RemovedMovie,
   failure: ToolError,
