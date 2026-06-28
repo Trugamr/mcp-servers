@@ -20,6 +20,11 @@ const TOOL_NAMES = [
   "grab_release",
   "list_queue",
   "list_quality_profiles",
+  "get_quality_profile",
+  "create_quality_profile",
+  "update_quality_profile",
+  "delete_quality_profile",
+  "list_languages",
   "list_root_folders",
 ]
 
