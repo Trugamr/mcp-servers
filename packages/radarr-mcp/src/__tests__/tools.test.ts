@@ -10,6 +10,7 @@ import {
   listQueue,
   RadarrToolkit,
   searchReleases,
+  type TextOp,
 } from "../tools.js"
 import { movieFixture } from "./fixtures/movie.js"
 import { queuePageFixture } from "./fixtures/queue.js"
@@ -240,13 +241,8 @@ describe("list_movies query surface", () => {
 
   // Library genres: Alpha [Drama, Crime], Bravo [Comedy], Charlie [Drama].
   it("filters genres with set semantics (existential positives, universal negatives)", async () => {
-    const byGenre = (genres: {
-      eq?: string
-      ne?: string
-      contains?: string
-      in?: ReadonlyArray<string>
-      nin?: ReadonlyArray<string>
-    }) => Effect.runPromise(run((r) => listMovies(r, { filter: { genres } }))).then(ids)
+    const byGenre = (genres: TextOp) =>
+      Effect.runPromise(run((r) => listMovies(r, { filter: { genres } }))).then(ids)
 
     expect(await byGenre({ contains: "drama" })).toEqual([1, 3])
     expect(await byGenre({ eq: "Comedy" })).toEqual([2])

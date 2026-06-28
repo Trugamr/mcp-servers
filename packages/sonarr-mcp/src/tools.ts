@@ -99,7 +99,7 @@ const ScopeEq = <A, I>(s: Schema.Schema<A, I>) => Schema.Struct({ eq: s })
 // matchers can't drift from the schemas they validate against.
 type EqOp<A> = Schema.Schema.Type<ReturnType<typeof Eq<A, A>>>
 type OrdOp<A> = Schema.Schema.Type<ReturnType<typeof Ord<A, A>>>
-type TextOp = Schema.Schema.Type<typeof Text>
+export type TextOp = Schema.Schema.Type<typeof Text>
 type BoolOp = Schema.Schema.Type<typeof Bool>
 
 // Each matcher returns true when the value satisfies every present operator (an
@@ -134,23 +134,23 @@ const matchText = (value: string | null | undefined, operators?: TextOp) => {
       (Predicate.isUndefined(operators.nin) || !operators.nin.includes(text)))
   )
 }
-// Genres are multi-valued, so the operators apply with set semantics: positive
-// operators are existential (some genre satisfies them), negative operators are
-// universal (no genre violates them). An item with no genres satisfies only the
+// Apply text operators to a multi-valued field (e.g. genres) with set semantics:
+// positive operators are existential (some value satisfies them), negatives are
+// universal (no value violates them). An empty/absent field satisfies only the
 // negative operators — it isn't excluded by `ne`/`nin`.
-const matchGenres = (values: ReadonlyArray<string> | undefined, operators?: TextOp) => {
-  const genres = values ?? []
-  const contains = operators?.contains
+const matchTextArray = (field: ReadonlyArray<string> | undefined, operators?: TextOp) => {
+  const values = field ?? []
+  const containsLower = operators?.contains?.toLowerCase()
   return (
     !operators ||
-    ((Predicate.isUndefined(operators.eq) || genres.includes(operators.eq)) &&
-      (Predicate.isUndefined(operators.ne) || !genres.includes(operators.ne)) &&
-      (Predicate.isUndefined(contains) ||
-        genres.some((genre) => genre.toLowerCase().includes(contains.toLowerCase()))) &&
+    ((Predicate.isUndefined(operators.eq) || values.includes(operators.eq)) &&
+      (Predicate.isUndefined(operators.ne) || !values.includes(operators.ne)) &&
+      (Predicate.isUndefined(containsLower) ||
+        values.some((value) => value.toLowerCase().includes(containsLower))) &&
       (Predicate.isUndefined(operators.in) ||
-        operators.in.some((genre) => genres.includes(genre))) &&
+        operators.in.some((value) => values.includes(value))) &&
       (Predicate.isUndefined(operators.nin) ||
-        !operators.nin.some((genre) => genres.includes(genre))))
+        !operators.nin.some((value) => values.includes(value))))
   )
 }
 const matchBoolean = (value: boolean, operators?: BoolOp) =>
@@ -299,7 +299,7 @@ const matchesSeries = (s: Series, f: SeriesFilterValue = {}) =>
   matchBoolean(s.monitored, f.monitored) &&
   matchEquality(s.qualityProfileId, f.qualityProfileId) &&
   matchText(s.network, f.network) &&
-  matchGenres(s.genres, f.genres) &&
+  matchTextArray(s.genres, f.genres) &&
   matchOrdered(s.year, f.year)
 
 const seriesOrder = (sort: SeriesSortValue = []) =>
